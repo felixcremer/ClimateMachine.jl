@@ -136,7 +136,7 @@ function init_risingbubble!(bl, state, aux, (x, y, z), t)
 
     # Compute temperature difference over bubble region
     if r <= rc
-        Δθ = FT(5) * cospi(r / rc / 2)
+        Δθ = -FT(5) * cospi(r / rc / 2)
     end
 
     # Compute perturbed thermodynamic state:
