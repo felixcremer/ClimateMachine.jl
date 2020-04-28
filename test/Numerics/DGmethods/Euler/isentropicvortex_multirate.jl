@@ -2,7 +2,8 @@ using CLIMA
 using CLIMA.ConfigTypes
 using CLIMA.Mesh.Topologies: BrickTopology
 using CLIMA.Mesh.Grids: DiscontinuousSpectralElementGrid
-using CLIMA.DGmethods: DGModel, init_ode_state, LocalGeometry, RemainderModel
+using CLIMA.DGmethods:
+    DGModel, init_ode_state, LocalGeometry, RemainderModel, remainder_DGModel
 using CLIMA.DGmethods.NumericalFluxes:
     RusanovNumericalFlux,
     CentralNumericalFluxGradient,
@@ -178,7 +179,7 @@ function run(
         CentralNumericalFluxGradient();
         state_auxiliary = dg.state_auxiliary,
     )
-    slow_dg = DGModel(
+    slow_dg = remainder_DGModel(
         slow_model,
         grid,
         RusanovNumericalFlux(),

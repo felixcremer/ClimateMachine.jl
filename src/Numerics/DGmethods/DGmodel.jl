@@ -52,7 +52,6 @@ function (dg::DGModel)(
     t;
     increment = false,
 )
-
     balance_law = dg.balancelaw
     device = typeof(state_conservative.data) <: Array ? CPU() : CUDA()
 
@@ -600,7 +599,13 @@ function restart_auxiliary_state(bl, grid, aux_data)
 end
 
 # fallback
-function update_auxiliary_state!(dg, balance_law, state_conservative, t, elems)
+function update_auxiliary_state!(
+    dg::DGModel,
+    balance_law,
+    state_conservative,
+    t,
+    elems,
+)
     return false
 end
 

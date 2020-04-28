@@ -1,3 +1,4 @@
+export remainder_DGModel
 """
     RemainderModel(main::BalanceLaw, subcomponents::Tuple)
 
@@ -10,6 +11,34 @@ remainder model
 struct RemainderModel{M, S} <: BalanceLaw
     main::M
     subs::S
+end
+
+function remainder_DGModel(
+    balancelaw,
+    grid,
+    numerical_flux_first_order,
+    numerical_flux_second_order,
+    numerical_flux_gradient;
+    state_auxiliary = create_auxiliary_state(balancelaw, grid),
+    state_gradient_flux = create_gradient_state(balancelaw, grid),
+    states_higher_order = create_higher_order_states(balancelaw, grid),
+    direction = EveryDirection(),
+    diffusion_direction = direction,
+    modeldata = nothing,
+)
+    DGModel(
+        balancelaw,
+        grid,
+        numerical_flux_first_order,
+        numerical_flux_second_order,
+        numerical_flux_gradient,
+        state_auxiliary,
+        state_gradient_flux,
+        states_higher_order,
+        direction,
+        diffusion_direction,
+        modeldata,
+    )
 end
 
 # Inherit most of the functionality from the main model
