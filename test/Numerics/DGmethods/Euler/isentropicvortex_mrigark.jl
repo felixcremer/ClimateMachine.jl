@@ -2,8 +2,7 @@ using CLIMA
 using CLIMA.ConfigTypes
 using CLIMA.Mesh.Topologies: BrickTopology
 using CLIMA.Mesh.Grids: DiscontinuousSpectralElementGrid
-using CLIMA.DGmethods:
-    DGModel, init_ode_state, LocalGeometry, RemainderModel, remainder_DGModel
+using CLIMA.DGmethods: DGModel, init_ode_state, LocalGeometry, remainder_DGModel
 using CLIMA.DGmethods.NumericalFluxes:
     RusanovNumericalFlux,
     CentralNumericalFluxGradient,
@@ -157,8 +156,6 @@ function run(
     )
     # The linear model has the fast time scales
     fast_model = AtmosAcousticLinearModel(model)
-    # The nonlinear model has the slow time scales
-    slow_model = RemainderModel(model, (fast_model,))
 
     dg = DGModel(
         model,
@@ -176,8 +173,8 @@ function run(
         state_auxiliary = dg.state_auxiliary,
     )
     slow_dg = remainder_DGModel(
-        slow_model,
-        grid,
+        dg,
+        (fast_dg,),
         RusanovNumericalFlux(),
         CentralNumericalFluxSecondOrder(),
         CentralNumericalFluxGradient();

@@ -14,21 +14,28 @@ struct RemainderModel{M, S} <: BalanceLaw
 end
 
 function remainder_DGModel(
-    balancelaw,
-    grid,
+    maindg,
+    subsdg,
     numerical_flux_first_order,
     numerical_flux_second_order,
     numerical_flux_gradient;
-    state_auxiliary = create_auxiliary_state(balancelaw, grid),
-    state_gradient_flux = create_gradient_state(balancelaw, grid),
-    states_higher_order = create_higher_order_states(balancelaw, grid),
+    state_auxiliary = maindg.state_auxiliary,
+    state_gradient_flux = create_gradient_state(maindg.balancelaw, maindg.grid),
+    states_higher_order = create_higher_order_states(
+        maindg.balancelaw,
+        maindg.grid,
+    ),
     direction = EveryDirection(),
-    diffusion_direction = direction,
-    modeldata = nothing,
+    diffusion_direction = maindg.diffusion_direction,
+    modeldata = maindg.modeldata,
 )
+    balancelaw = RemainderModel(
+        maindg.balancelaw,
+        ntuple(i -> subsdg[i].balancelaw, length(subsdg)),
+    )
     DGModel(
         balancelaw,
-        grid,
+        maindg.grid,
         numerical_flux_first_order,
         numerical_flux_second_order,
         numerical_flux_gradient,

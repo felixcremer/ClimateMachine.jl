@@ -2,8 +2,7 @@ using CLIMA
 using CLIMA.ConfigTypes
 using CLIMA.Mesh.Topologies: BrickTopology
 using CLIMA.Mesh.Grids: DiscontinuousSpectralElementGrid
-using CLIMA.DGmethods:
-    DGModel, init_ode_state, LocalGeometry, RemainderModel, remainder_DGModel
+using CLIMA.DGmethods: DGModel, init_ode_state, LocalGeometry, remainder_DGModel
 using CLIMA.DGmethods.NumericalFluxes:
     RusanovNumericalFlux,
     CentralNumericalFluxGradient,
@@ -163,7 +162,6 @@ function run(
     )
 
     linear_model = AtmosAcousticLinearModel(model)
-    nonlinear_model = RemainderModel(model, (linear_model,))
 
     dg = DGModel(
         model,
@@ -184,8 +182,8 @@ function run(
 
     if split_explicit_implicit
         dg_nonlinear = remainder_DGModel(
-            nonlinear_model,
-            grid,
+            dg,
+            (dg_linear,),
             RusanovNumericalFlux(),
             CentralNumericalFluxSecondOrder(),
             CentralNumericalFluxGradient();
