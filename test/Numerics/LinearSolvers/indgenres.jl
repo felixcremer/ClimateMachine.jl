@@ -61,7 +61,4 @@ y = copy(x)
 linear_operator! = closure_linear_operator_multi!(A, size(A)...)
 linear_operator!(x,y)
 iters = linearsolve!(linear_operator!, gmres, x, b; max_iters = length(b[:, 1]))
-
-###
-
-CLIMA.IndGenMinResSolver.convert_structure!(x, b, gmres.reshape_tuple_b, gmres.permute_tuple_b)
+display(gmres.residual[79,:])
