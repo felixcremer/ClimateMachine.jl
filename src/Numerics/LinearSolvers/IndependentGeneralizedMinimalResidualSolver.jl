@@ -274,4 +274,185 @@ function construct_solution!(i, gmres; ndrange = size(gmres.x), cpu_threads = Th
     return event
 end
 
+# Helper Functions
+
+"""
+initialize_arnoldi!(g, I)
+
+# Description
+- First step of Arnoldi Iteration is to define first Krylov vector. Additionally sets things equal to zero
+
+# Arguments
+- `g`: (struct) [OVERWRITTEN] the gmres struct
+- `I`: (int) thread index
+
+# Return
+nothing
+"""
+@inline function initialize_arnoldi!(gmres, I)
+    # set (almost) everything to zero to be sure
+    # the assumption is that gmres.k_n is small enough
+    # to where these loops don't matter that much
+    ft_zero = zero(eltype(gmres.H)) # float type zero
+
+    @inbounds for i in 1:(gmres.k_n + 1)
+        gmres.rhs[i, I] = ft_zero
+        @inbounds for j in 1:gmres.k_n
+            gmres.R[i,j,I] = ft_zero
+            gmres.H[i,j,I] = ft_zero
+        end
+    end
+    # gmres.x was initialized as the initial x
+    # gmres.sol was initialized right before this function call
+    # gmres.b was initialized right before this function call
+    # compute norm
+    @inbounds for i in 1:gmres.m
+        gmres.rhs[1, I] += gmres.b[i, I] * gmres.b[i, I]
+    end
+    gmres.rhs[1, I] = sqrt(gmres.rhs[1, I])
+    # now start computations
+    @inbounds for i in 1:gmres.m
+        gmres.sol[i, I] /= gmres.rhs[1, I]
+        gmres.Q[i, 1, I] = gmres.b[i, I] / gmres.rhs[1, I] # First Krylov vector
+    end
+    return nothing
+end
+
+"""
+initialize_QR!(gmres::ParallelGMRES, I)
+
+# Description
+initializes the QR decomposition of the UpperHesenberg Matrix
+
+# Arguments
+- `gmres`: (struct) [OVERWRITTEN] the gmres struct
+- `I`: (int) thread index
+
+# Return
+nothing
+"""
+@inline function initialize_QR!(gmres, I)
+    gmres.cs[1, I] = gmres.H[1,1, I]
+    gmres.cs[2, I] = gmres.H[2,1, I]
+    gmres.R[1, 1, I] = sqrt(gmres.cs[1, I]^2 + gmres.cs[2, I]^2)
+    gmres.cs[1, I] /= gmres.R[1,1, I]
+    gmres.cs[2, I] /= -gmres.R[1,1, I]
+    return nothing
+end
+
+# The meat of gmres with updates that leverage information from the previous iteration
+"""
+update_arnoldi!(n, gmres, I)
+# Description
+Perform an Arnoldi iteration update
+
+# Arguments
+- `n`: current iteration number
+- `gmres`: gmres struct that gets overwritten
+- `I`: (int) thread index
+# Return
+- nothing
+# linear_operator! Arguments
+- `linear_operator!(x,y)`
+# Description
+- Performs Linear operation on vector and overwrites it
+# Arguments
+- `y`: (array)
+# Return
+nothing
+
+"""
+@inline function update_arnoldi!(n, gmres, I)
+    # make new Krylov Vector orthogonal to previous ones
+    @inbounds for j in 1:n
+        gmres.H[j, n, I] = 0
+        # dot products
+        @inbounds for i in 1:gmres.m
+            gmres.H[j, n, I] += gmres.Q[i, j, I] * gmres.sol[i, I]
+        end
+        # orthogonalize latest Krylov Vector
+        @inbounds for i in 1:gmres.m
+            gmres.sol[i, I] -= gmres.H[j, n, I] * gmres.Q[i,j, I]
+        end
+    end
+    norm_q = 0.0
+    @inbounds for i in 1:gmres.m
+        norm_q += gmres.sol[i,I] * gmres.sol[i,I]
+    end
+    gmres.H[n+1, n, I] = sqrt(norm_q)
+    @inbounds for i in 1:gmres.m
+        gmres.Q[i, n+1, I] = gmres.sol[i, I] / gmres.H[n+1, n, I]
+    end
+    return nothing
+end
+
+"""
+update_QR!(n, gmres, I)
+
+# Description
+Given a QR decomposition of the first n-1 columns of an upper hessenberg matrix, this computes the QR decomposition associated with the first n columns
+# Arguments
+- `gmres`: (struct) [OVERWRITTEN] the struct has factors that are updated
+- `n`: (integer) column that needs to be updated
+- `I`: (int) thread index
+# Return
+- nothing
+
+# Comment
+What is actually produced by the algorithm isn't the Q in the QR decomposition but rather Q^*. This is convenient since this is what is actually needed to solve the linear system
+"""
+@inline function update_QR!(n, gmres, I)
+    # Apply previous Q to new column
+    @inbounds for i in 1:n
+        gmres.R[i, n, I] = gmres.H[i, n, I]
+    end
+    # apply_rotation!(view(gmres.R, 1:n, n, I), gmres.cs, n-1, I)
+    @inbounds for i in 1:n-1
+        tmp1 = gmres.cs[1 + 2*(i-1), I] * gmres.R[i, n, I] - gmres.cs[2*i, I] * gmres.R[i+1, n, I]
+        gmres.R[i+1, n, I] = gmres.cs[2*i, I] * gmres.R[i, n, I] + gmres.cs[1 + 2*(i-1), I] * gmres.R[i+1, n, I]
+        gmres.R[i, n, I] = tmp1
+    end
+    # Now update, cs and R
+    gmres.cs[1+2*(n-1), I] = gmres.R[n, n, I]
+    gmres.cs[2*n, I] = gmres.H[n+1,n, I]
+    gmres.R[n, n, I] = sqrt(gmres.cs[1+2*(n-1), I]^2 + gmres.cs[2*n, I]^2)
+    gmres.cs[1+2*(n-1), I] /= gmres.R[n, n, I]
+    gmres.cs[2*n, I] /= -gmres.R[n, n, I]
+    return nothing
+end
+
+"""
+solve_optimization!(iteration, gmres, I)
+
+# Description
+Solves the optimization problem in GMRES
+# Arguments
+- `iteration`: (int) current iteration number
+- `gmres`: (struct) [OVERWRITTEN]
+- `I`: (int) thread index
+# Return
+nothing
+"""
+@inline function solve_optimization!(n, gmres, I)
+    # just need to update rhs from previous iteration
+    # apply latest gibbs rotation
+    tmp1 = gmres.cs[1 + 2*(n-1), I] * gmres.rhs[n, I] - gmres.cs[2*n, I] * gmres.rhs[n+1, I]
+    gmres.rhs[n+1, I] = gmres.cs[2*n, I] * gmres.rhs[n, I] + gmres.cs[1 + 2*(n-1), I] * gmres.rhs[n+1, I]
+    gmres.rhs[n, I] = tmp1
+    # gmres.rhs[iteration+1] is the residual. Technically convergence should be checked here.
+    gmres.residual[n, I] = abs.(gmres.rhs[n+1, I])
+    # copy for performing the backsolve and saving gmres.rhs
+    @inbounds for i in 1:n
+        gmres.sol[i, I] = gmres.rhs[i, I]
+    end
+    # do the backsolve
+    @inbounds for i in n:-1:1
+        gmres.sol[i, I] /= gmres.R[i,i, I]
+        @inbounds for j in 1:i-1
+            gmres.sol[j, I] -= gmres.R[j,i, I] * gmres.sol[i, I]
+        end
+    end
+    return nothing
+end
+
 end # end of module
