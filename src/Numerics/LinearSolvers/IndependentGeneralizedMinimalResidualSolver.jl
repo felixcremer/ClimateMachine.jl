@@ -105,12 +105,36 @@ end
 # initialize function (1)
 function LS.initialize!(linearoperator!, Q, Qrhs, solver::IndGenMinRes, args...)
     # body of initialize function in abstract iterative solver
-    return false, 0
+    return false, zero(eltype(Q))
 end
 
 # iteration function (2)
 function LS.doiteration!(linearoperator!, Q, Qrhs, solver::IndGenMinRes, threshold, args...)
+    # initialize gmres.x
+    convert_structure!(gmres.x, Q, gmres.reshape_tuple_f, gmres.permute_tuple_f)
+    # apply linear operator to construct residual
+    linearoperator!(Q, Qrhs, args...)
+    r_vector = Qrhs .- Q
+    # initialize gmres.b
+    convert_structure!(gmres.b, r_vector, gmres.reshape_tuple_f, gmres.permute_tuple_f)
+    # apply linear operator to construct second krylov vector
+    linearoperator!(Q, r_vector, args...)
+    # initialize gmres.sol
+    convert_structure!(gmres.sol, Q, gmres.reshape_tuple_f, gmres.permute_tuple_f)
+    # initialize the rest of gmres
+    event = initialize_gmres!(gmres)
+    wait(event)
     # body of iteration
+    for i in 1:gmres.k_n
+        convert_structure!(r_vector, view(gmres.Q[:, i, :]), gmres.reshape_tuple_b, gmres.permute_tuple_b)
+        linear_operator!(Q, r_vector)
+        convert_structure!(gmres.sol, Q, gmres.reshape_tuple_f, gmres.permute_tuple_f)
+        event = gmres_update!(i, gmres)
+        wait(event)
+    end
+    event = construct_solution!(iterations, gmres)
+    wait(event)
+    convert_structure!(x, gmres.x, reshape_tuple_b, permute_tuple_b)
     return Bool, Int, Float
 end
 
@@ -451,6 +475,34 @@ nothing
         @inbounds for j in 1:i-1
             gmres.sol[j, I] -= gmres.R[j,i, I] * gmres.sol[i, I]
         end
+    end
+    return nothing
+end
+
+"""
+function convert_structure!(x, y, reshape_tuple, permute_tuple)
+
+# Description
+Computes a tensor transpose and stores result in x
+- This needs to be improved!
+
+# Arguments
+- `x`: (array) [OVERWRITTEN]. target destination for storing the y data
+- `y`: (array). data that we want to copy
+- `reshape_tuple`: (tuple) reshapes y to be like that of x, up to a permutation
+- `permute_tuple`: (tuple) permutes the reshaped array into the correct structure
+
+# Keyword Arguments
+- `convert`: (bool). decides whether or not permute and convert. The default is true
+
+# Return
+nothing
+"""
+@inline function convert_structure!(x, y, reshape_tuple, permute_tuple; convert = true)
+    if convert
+        alias_y = reshape(y, reshape_tuple)
+        permute_y = permutedims(alias_y, permute_tuple)
+        x[:] .= permute_y[:]
     end
     return nothing
 end
