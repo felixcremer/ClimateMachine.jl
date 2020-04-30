@@ -63,7 +63,7 @@ struct IndGenMinRes{FT, IT, VT, AT, TT1, TT2} <: LS.AbstractIterativeLinearSolve
 end
 
 # So that the struct can be passed into kernels
-Adapt.adapt_structure(to, x::IndGenMinRes) = IndGenMinRes(x.atol, x.rtol, x.m, x.n, x.k_n, adapt(to, x.residual), adapt(to, x.b), adapt(to, x.x),  adapt(to, x.sol), adapt(to, x.rhs), adapt(to, x.cs),  adapt(to, x.Q),  adapt(to, x.H), adapt(to, x.R), reshape_tuple_f, permute_tuple_f, reshape_tuple_b, permute_tuple_b)
+Adapt.adapt_structure(to, x::IndGenMinRes) = IndGenMinRes(x.atol, x.rtol, x.m, x.n, x.k_n, adapt(to, x.residual), adapt(to, x.b), adapt(to, x.x),  adapt(to, x.sol), adapt(to, x.rhs), adapt(to, x.cs),  adapt(to, x.Q),  adapt(to, x.H), adapt(to, x.R), x.reshape_tuple_f, x.permute_tuple_f, x.reshape_tuple_b, x.permute_tuple_b)
 
 """
 IndGenMinRes(Qrhs; m = length(Qrhs[:,1]), n = length(Qrhs[1,:]), subspace_size = m, atol = sqrt(eps(eltype(Qrhs))), rtol = sqrt(eps(eltype(Qrhs))), ArrayType = Array, reshape_tuple_f = size(Qrhs), permute_tuple_f = Tuple(1:length(size(Qrhs))), reshape_tuple_b = size(Qrhs), permute_tuple_b = Tuple(1:length(size(Qrhs))))
