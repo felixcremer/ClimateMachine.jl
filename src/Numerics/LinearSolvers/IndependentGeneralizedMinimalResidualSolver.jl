@@ -120,7 +120,7 @@ function LS.doiteration!(linearoperator!, Q, Qrhs, gmres::IndGenMinRes, threshol
     rr = norm(r_vector) / norm(Qrhs)
     # check if the initial guess is fantastic
     if (ar < gmres.atol) || (rr < gmres.rtol)
-        return true, 0, atol
+        return true, 0, ar
     end
     # initialize gmres.b
     convert_structure!(gmres.b, r_vector, gmres.reshape_tuple_f, gmres.permute_tuple_f)
@@ -136,28 +136,28 @@ function LS.doiteration!(linearoperator!, Q, Qrhs, gmres::IndGenMinRes, threshol
     if (ar < gmres.atol) || (rr < gmres.rtol)
         event = construct_solution!(iterations, gmres)
         wait(event)
-        convert_structure!(x, gmres.x, reshape_tuple_b, permute_tuple_b)
-        return true, 1, atol
+        convert_structure!(Q, gmres.x, gmres.reshape_tuple_b, gmres.permute_tuple_b)
+        return true, 1, ar
     end
     # body of iteration
     @inbounds for i in 2:gmres.k_n
-        convert_structure!(r_vector, view(gmres.Q[:, i, :]), gmres.reshape_tuple_b, gmres.permute_tuple_b)
-        linear_operator!(Q, r_vector)
+        convert_structure!(r_vector, view(gmres.Q, :, i, :), gmres.reshape_tuple_b, gmres.permute_tuple_b)
+        linearoperator!(Q, r_vector, args...)
         convert_structure!(gmres.sol, Q, gmres.reshape_tuple_f, gmres.permute_tuple_f)
         event = gmres_update!(i, gmres)
         wait(event)
         ar, rr = compute_residuals(gmres, i)
         # check if converged
         if (ar < gmres.atol) || (rr < gmres.rtol)
-            event = construct_solution!(iterations, gmres)
+            event = construct_solution!(i, gmres)
             wait(event)
-            convert_structure!(x, gmres.x, reshape_tuple_b, permute_tuple_b)
-            return true, i, atol
+            convert_structure!(Q, gmres.x, gmres.reshape_tuple_b, gmres.permute_tuple_b)
+            return true, i, ar
         end
     end
-    event = construct_solution!(iterations, gmres)
+    event = construct_solution!(gmres.k_n, gmres)
     wait(event)
-    convert_structure!(x, gmres.x, reshape_tuple_b, permute_tuple_b)
+    convert_structure!(Q, gmres.x, gmres.reshape_tuple_b, gmres.permute_tuple_b)
     return Bool, Int, Float
 end
 
@@ -549,8 +549,8 @@ Compute atol and rtol of current iteration
 - `rtol`: (float) relative tolerance
 """
 function compute_residuals(gmres, i)
-    atol = maximum(gmres.residual[i])
-    rtol = maximum(gmres.residual[i] ./ norm(gmres.R[:, 1]))
+    atol = maximum(gmres.residual[i,:])
+    rtol = maximum(gmres.residual[i,:] ./ norm(gmres.R[1,1,:]))
     return atol, rtol
 end
 
