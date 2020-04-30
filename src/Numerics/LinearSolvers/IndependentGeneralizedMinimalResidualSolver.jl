@@ -41,7 +41,7 @@ Solving n linear systems iteratively
 - Too much memory in H and R struct: Could use a sparse representation to cut memory use in half (or more)
 - Needs to perform a transpose of original data structure into current data structure: Could perhaps do a transpose free version, but the code gets a bit clunkier and the memory would no longer be coalesced for the heavy operations
 """
-struct IndGenMinRes{FT, IT, VT, AT, TT1, TT21} <: LS.AbstractIterativeLinearSolver
+struct IndGenMinRes{FT, IT, VT, AT, TT1, TT2} <: LS.AbstractIterativeLinearSolver
     atol::FT
     rtol::FT
     m::IT
@@ -55,7 +55,7 @@ struct IndGenMinRes{FT, IT, VT, AT, TT1, TT21} <: LS.AbstractIterativeLinearSolv
     cs::VT
     Q::AT
     H::AT
-    R::AT2
+    R::AT
     reshape_tuple_f::TT1
     permute_tuple_f::TT1
     reshape_tuple_b::TT2
@@ -63,7 +63,7 @@ struct IndGenMinRes{FT, IT, VT, AT, TT1, TT21} <: LS.AbstractIterativeLinearSolv
 end
 
 # So that the struct can be passed into kernels
-Adapt.adapt_structure(to, x::ParallelGMRES) = ParallelGMRES(x.atol, x.rtol, x.m, x.n, x.k_n, adapt(to, x.residual), adapt(to, x.b), adapt(to, x.x),  adapt(to, x.sol), adapt(to, x.rhs), adapt(to, x.cs),  adapt(to, x.Q),  adapt(to, x.H), adapt(to, x.R), reshape_tuple_f, permute_tuple_f, reshape_tuple_b, permute_tuple_b)
+Adapt.adapt_structure(to, x::IndGenMinRes) = IndGenMinRes(x.atol, x.rtol, x.m, x.n, x.k_n, adapt(to, x.residual), adapt(to, x.b), adapt(to, x.x),  adapt(to, x.sol), adapt(to, x.rhs), adapt(to, x.cs),  adapt(to, x.Q),  adapt(to, x.H), adapt(to, x.R), reshape_tuple_f, permute_tuple_f, reshape_tuple_b, permute_tuple_b)
 
 """
 IndGenMinRes(Qrhs; m = length(Qrhs[:,1]), n = length(Qrhs[1,:]), subspace_size = m, atol = sqrt(eps(eltype(Qrhs))), rtol = sqrt(eps(eltype(Qrhs))), ArrayType = Array, reshape_tuple_f = size(Qrhs), permute_tuple_f = Tuple(1:length(size(Qrhs))), reshape_tuple_b = size(Qrhs), permute_tuple_b = Tuple(1:length(size(Qrhs))))
@@ -287,7 +287,7 @@ Uses the initialize_gmres_kernel! for initalizing
 # Return
 event. A KernelAbstractions object
 """
-function initialize_gmres!(gmres::ParallelGMRES; ndrange = gmres.n, cpu_threads = Threads.nthreads(), gpu_threads = 256)
+function initialize_gmres!(gmres::IndGenMinRes; ndrange = gmres.n, cpu_threads = Threads.nthreads(), gpu_threads = 256)
     if isa(gmres.b, Array)
         kernel! = initialize_gmres_kernel!(CPU(), cpu_threads)
     else
@@ -398,7 +398,7 @@ nothing
 end
 
 """
-initialize_QR!(gmres::ParallelGMRES, I)
+initialize_QR!(gmres::IndGenMinRes, I)
 
 # Description
 initializes the QR decomposition of the UpperHesenberg Matrix
