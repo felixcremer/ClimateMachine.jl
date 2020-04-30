@@ -109,12 +109,19 @@ function LS.initialize!(linearoperator!, Q, Qrhs, solver::IndGenMinRes, args...)
 end
 
 # iteration function (2)
-function LS.doiteration!(linearoperator!, Q, Qrhs, solver::IndGenMinRes, threshold, args...)
+function LS.doiteration!(linearoperator!, Q, Qrhs, gmres::IndGenMinRes, threshold, args...)
     # initialize gmres.x
     convert_structure!(gmres.x, Q, gmres.reshape_tuple_f, gmres.permute_tuple_f)
     # apply linear operator to construct residual
     linearoperator!(Q, Qrhs, args...)
     r_vector = Qrhs .- Q
+    # The following ar and rr are technically not correct in general cases
+    ar = norm(r_vector)
+    rr = norm(r_vector) / norm(Qrhs)
+    # check if the initial guess is fantastic
+    if (ar < gmres.atol) || (rr < gmres.rtol)
+        return true, 0, atol
+    end
     # initialize gmres.b
     convert_structure!(gmres.b, r_vector, gmres.reshape_tuple_f, gmres.permute_tuple_f)
     # apply linear operator to construct second krylov vector
@@ -124,18 +131,66 @@ function LS.doiteration!(linearoperator!, Q, Qrhs, solver::IndGenMinRes, thresho
     # initialize the rest of gmres
     event = initialize_gmres!(gmres)
     wait(event)
+    ar, rr = compute_residuals(gmres, 1)
+    # check if converged
+    if (ar < gmres.atol) || (rr < gmres.rtol)
+        event = construct_solution!(iterations, gmres)
+        wait(event)
+        convert_structure!(x, gmres.x, reshape_tuple_b, permute_tuple_b)
+        return true, 1, atol
+    end
     # body of iteration
-    for i in 1:gmres.k_n
+    @inbounds for i in 2:gmres.k_n
         convert_structure!(r_vector, view(gmres.Q[:, i, :]), gmres.reshape_tuple_b, gmres.permute_tuple_b)
         linear_operator!(Q, r_vector)
         convert_structure!(gmres.sol, Q, gmres.reshape_tuple_f, gmres.permute_tuple_f)
         event = gmres_update!(i, gmres)
         wait(event)
+        ar, rr = compute_residuals(gmres, i)
+        # check if converged
+        if (ar < gmres.atol) || (rr < gmres.rtol)
+            event = construct_solution!(iterations, gmres)
+            wait(event)
+            convert_structure!(x, gmres.x, reshape_tuple_b, permute_tuple_b)
+            return true, i, atol
+        end
     end
     event = construct_solution!(iterations, gmres)
     wait(event)
     convert_structure!(x, gmres.x, reshape_tuple_b, permute_tuple_b)
     return Bool, Int, Float
+end
+
+# The function(s) that probably needs the most help
+"""
+function convert_structure!(x, y, reshape_tuple, permute_tuple)
+
+# Description
+Computes a tensor transpose and stores result in x
+- This needs to be improved!
+
+# Arguments
+- `x`: (array) [OVERWRITTEN]. target destination for storing the y data
+- `y`: (array). data that we want to copy
+- `reshape_tuple`: (tuple) reshapes y to be like that of x, up to a permutation
+- `permute_tuple`: (tuple) permutes the reshaped array into the correct structure
+
+# Keyword Arguments
+- `convert`: (bool). decides whether or not permute and convert. The default is true
+
+# Return
+nothing
+
+# Comment
+A naive kernel version of this operation is too slow
+"""
+@inline function convert_structure!(x, y, reshape_tuple, permute_tuple; convert = true)
+    if convert
+        alias_y = reshape(y, reshape_tuple)
+        permute_y = permutedims(alias_y, permute_tuple)
+        x[:] .= permute_y[:]
+    end
+    return nothing
 end
 
 # Kernels
@@ -430,7 +485,7 @@ What is actually produced by the algorithm isn't the Q in the QR decomposition b
     @inbounds for i in 1:n
         gmres.R[i, n, I] = gmres.H[i, n, I]
     end
-    # apply_rotation!(view(gmres.R, 1:n, n, I), gmres.cs, n-1, I)
+    # apply rotation
     @inbounds for i in 1:n-1
         tmp1 = gmres.cs[1 + 2*(i-1), I] * gmres.R[i, n, I] - gmres.cs[2*i, I] * gmres.R[i+1, n, I]
         gmres.R[i+1, n, I] = gmres.cs[2*i, I] * gmres.R[i, n, I] + gmres.cs[1 + 2*(i-1), I] * gmres.R[i+1, n, I]
@@ -480,31 +535,23 @@ nothing
 end
 
 """
-function convert_structure!(x, y, reshape_tuple, permute_tuple)
+compute_residuals(gmres)
 
 # Description
-Computes a tensor transpose and stores result in x
-- This needs to be improved!
+Compute atol and rtol of current iteration
 
 # Arguments
-- `x`: (array) [OVERWRITTEN]. target destination for storing the y data
-- `y`: (array). data that we want to copy
-- `reshape_tuple`: (tuple) reshapes y to be like that of x, up to a permutation
-- `permute_tuple`: (tuple) permutes the reshaped array into the correct structure
-
-# Keyword Arguments
-- `convert`: (bool). decides whether or not permute and convert. The default is true
+- `gmres`: (struct)
+- `i`: (current iteration)
 
 # Return
-nothing
+- `atol`: (float) absolute tolerance
+- `rtol`: (float) relative tolerance
 """
-@inline function convert_structure!(x, y, reshape_tuple, permute_tuple; convert = true)
-    if convert
-        alias_y = reshape(y, reshape_tuple)
-        permute_y = permutedims(alias_y, permute_tuple)
-        x[:] .= permute_y[:]
-    end
-    return nothing
+function compute_residuals(gmres, i)
+    atol = maximum(gmres.residual[i])
+    rtol = maximum(gmres.residual[i] ./ norm(gmres.R[:, 1]))
+    return atol, rtol
 end
 
 end # end of module
