@@ -26,7 +26,6 @@ A = [
     -1.0 2.0 -1.0
     0.0 -1.0 2.0
 ];
-# We define the matrix `A` here as a global variable for convenience later.
 
 # We can see that it is symmetric. We can check that it is positive definite by checking the spectrum
 eigvals(A)
@@ -190,4 +189,4 @@ iters
 # ## Tips
 # 1. The convergence criteria should be changed, machine precision is too small and the maximum iterations is often too large
 # 2. Use a preconditioner if possible
-# 3. Make sure that the linear system really is symmetric and positive-definite 
+# 3. Make sure that the linear system really is symmetric and positive-definite

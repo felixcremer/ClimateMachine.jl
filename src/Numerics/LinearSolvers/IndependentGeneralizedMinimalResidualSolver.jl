@@ -102,6 +102,9 @@ function IndGenMinRes(Qrhs; m = length(Qrhs[:,1]), n = length(Qrhs[1,:]), subspa
     return IndGenMinRes(atol, rtol, m, n, k_n, residual, b, x, sol, rhs, cs, Q, H, R, reshape_tuple_f, permute_tuple_f, reshape_tuple_b, permute_tuple_b)
 end
 
+# TODO test this with MPIStateArray or create seperate convenience constructor
+
+
 # initialize function (1)
 function LS.initialize!(linearoperator!, Q, Qrhs, solver::IndGenMinRes, args...)
     # body of initialize function in abstract iterative solver
@@ -192,6 +195,10 @@ A naive kernel version of this operation is too slow
     end
     return nothing
 end
+
+# TODO test these with MPIStateArray
+@inline convert_structure!(x, y::MPIStateArray, reshape_tuple, permute_tuple) = convert_structure!(x, y.data, reshape_tuple, permute_tuple)
+@inline convert_structure!(x::MPIStateArray, y, reshape_tuple, permute_tuple) = convert_structure!(x.data, y, reshape_tuple, permute_tuple)
 
 # Kernels
 """
