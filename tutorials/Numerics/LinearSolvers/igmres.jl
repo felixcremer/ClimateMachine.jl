@@ -6,14 +6,10 @@
 # 3. Contruct a column-wise linear solver with IGMRES
 
 # ## What is it?
-# GMRES is a general method for solving linear systems:
+# GMRES is a Krylov subspace method for solving linear systems:
 # ```math
 #  Ax = b
 # ```
-# via iterative methods.
 # !!! warning
 #     The method can be quite wasteful with memory if too many iterations are required.
 # See the [wikipedia](https://en.wikipedia.org/wiki/Generalized_minimal_residual_method) for more details.
-
-
-###

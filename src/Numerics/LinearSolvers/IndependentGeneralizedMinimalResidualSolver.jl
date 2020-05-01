@@ -5,6 +5,7 @@ export IndGenMinRes
 using ..LinearSolvers
 const LS = LinearSolvers
 using Adapt, KernelAbstractions, LinearAlgebra
+using CLIMA.MPIStateArrays
 
 # struct
 """
