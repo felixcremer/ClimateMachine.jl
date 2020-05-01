@@ -162,7 +162,9 @@ function LS.doiteration!(linearoperator!, Q, Qrhs, gmres::IndGenMinRes, threshol
     event = construct_solution!(gmres.k_n, gmres)
     wait(event)
     convert_structure!(Q, gmres.x, gmres.reshape_tuple_b, gmres.permute_tuple_b)
-    return Bool, Int, Float
+    ar, rr = compute_residuals(gmres, gmres.k_n)
+    converged = (ar < gmres.atol) || (rr < gmres.rtol)
+    return converged, gmres.k_n, ar
 end
 
 # The function(s) that probably needs the most help
