@@ -524,7 +524,7 @@ nothing
 """
 @inline function solve_optimization!(n, gmres, I)
     # just need to update rhs from previous iteration
-    # apply latest gibbs rotation
+    # apply latest givens rotation
     tmp1 = gmres.cs[1 + 2*(n-1), I] * gmres.rhs[n, I] - gmres.cs[2*n, I] * gmres.rhs[n+1, I]
     gmres.rhs[n+1, I] = gmres.cs[2*n, I] * gmres.rhs[n, I] + gmres.cs[1 + 2*(n-1), I] * gmres.rhs[n+1, I]
     gmres.rhs[n, I] = tmp1
