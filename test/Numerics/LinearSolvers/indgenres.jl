@@ -114,7 +114,7 @@ norm(sol - mpi_x[:,:,1][:])
 
 ###
 # now need to try the columnwise test
-
+Random.seed!(1235)
 # ## More Complex Example
 function closure_linear_operator!(A, tup)
     function linear_operator!(y, x)
@@ -142,7 +142,7 @@ B = [
     for i1 in 1:tup[1], i2 in 1:tup[2], i4 in 1:tup[4], i6 in 1:tup[6]
 ]
 columnwise_A = [
-    B[i1, i2, i4, i6] * B[i1, i2, i4, i6]' + 10I
+    B[i1, i2, i4, i6] + 10I
     for i1 in 1:tup[1], i2 in 1:tup[2], i4 in 1:tup[4], i6 in 1:tup[6]
 ]
 columnwise_inv_A = [
@@ -155,10 +155,12 @@ columnwise_inverse_linear_operator! =
 
 mpi_tup = (tup[1] * tup[2] * tup[3], tup[4], tup[5] * tup[6])
 b = randn(mpi_tup)
-x = randn(mpi_tup)
+x = copy(b)
+columnwise_inverse_linear_operator!(x, b)
+x += randn((tup[1] * tup[2] * tup[3], tup[4], tup[5] * tup[6])) * 0.1
 
 reshape_tuple_f = tup
-permute_tuple_f = (3,5,1,4,2,6)
+permute_tuple_f = (3,5,1,4,2,6) # make the column indices the fast indices
 permute_tuple_b = permute_tuple_f
 tmp_reshape_tuple_b = [tup...]
 permute!(tmp_reshape_tuple_b, [permute_tuple_f...])
@@ -166,14 +168,21 @@ reshape_tuple_b = Tuple(tmp_reshape_tuple_b)
 
 # yeah it isn't pretty, should probably define some convenience function
 # that uses the dg model
-gmres = IndGenMinRes(b, ArrayType = ArrayType, m = tup[3]*tup[5], n = tup[1]*tup[2]*tup[4]*tup[6], reshape_tuple_f = reshape_tuple_f, permute_tuple_f = permute_tuple_f, reshape_tuple_b = reshape_tuple_b, permute_tuple_b = permute_tuple_b)
+gmres = IndGenMinRes(b, ArrayType = ArrayType, m = tup[3]*tup[5], n = tup[1]*tup[2]*tup[4]*tup[6], reshape_tuple_f = reshape_tuple_f, permute_tuple_f = permute_tuple_f, reshape_tuple_b = reshape_tuple_b, permute_tuple_b = permute_tuple_b, atol = eps(T), rtol = eps(T))
 
 x_exact = copy(x)
 iters = linearsolve!(columnwise_linear_operator!, gmres, x, b, max_iters = tup[3]*tup[5])
 
-#=
+# check that the residual is what is expected
+ar, rr = IndGenMinResSolver.compute_residuals(gmres, iters)
+converged = (ar < gmres.atol) || (rr < gmres.rtol)
+# sometimes gmres.R[1,1,:] is very large, this means that the rr criteria is satisfied
+
 columnwise_inverse_linear_operator!(x_exact, b)
 norm(x - x_exact) / norm(x_exact)
 columnwise_linear_operator!(x_exact, x)
 norm(x_exact - b)/ norm(b)
-=#
+
+ar, rr = IndGenMinResSolver.compute_residuals(gmres, iters)
+(ar < gmres.atol) || (rr < gmres.rtol)
+###
