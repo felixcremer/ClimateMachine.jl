@@ -166,11 +166,14 @@ reshape_tuple_b = Tuple(tmp_reshape_tuple_b)
 
 # yeah it isn't pretty, should probably define some convenience function
 # that uses the dg model
-linearsolver = IndGenMinRes(b, ArrayType = ArrayType, m = tup[3]*tup[5], n = tup[1]*tup[2]*tup[4]*tup[6], reshape_tuple_f = reshape_tuple_f, permute_tuple_f = permute_tuple_f, reshape_tuple_b = reshape_tuple_b, permute_tuple_b = permute_tuple_b)
+gmres = IndGenMinRes(b, ArrayType = ArrayType, m = tup[3]*tup[5], n = tup[1]*tup[2]*tup[4]*tup[6], reshape_tuple_f = reshape_tuple_f, permute_tuple_f = permute_tuple_f, reshape_tuple_b = reshape_tuple_b, permute_tuple_b = permute_tuple_b)
 
-iters = linearsolve!(columnwise_linear_operator!, linearsolver, x, b, max_iters = tup[3]*tup[5])
 x_exact = copy(x)
+iters = linearsolve!(columnwise_linear_operator!, gmres, x, b, max_iters = tup[3]*tup[5])
+
+#=
 columnwise_inverse_linear_operator!(x_exact, b)
 norm(x - x_exact) / norm(x_exact)
 columnwise_linear_operator!(x_exact, x)
 norm(x_exact - b)/ norm(b)
+=#

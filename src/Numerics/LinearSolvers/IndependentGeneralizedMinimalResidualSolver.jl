@@ -140,7 +140,7 @@ function LS.doiteration!(linearoperator!, Q, Qrhs, gmres::IndGenMinRes, threshol
     ar, rr = compute_residuals(gmres, 1)
     # check if converged
     if (ar < gmres.atol) || (rr < gmres.rtol)
-        event = construct_solution!(iterations, gmres)
+        event = construct_solution!(1, gmres)
         wait(event)
         convert_structure!(Q, gmres.x, gmres.reshape_tuple_b, gmres.permute_tuple_b)
         return true, 1, ar
@@ -161,7 +161,7 @@ function LS.doiteration!(linearoperator!, Q, Qrhs, gmres::IndGenMinRes, threshol
             return true, i, ar
         end
     end
-    
+
     event = construct_solution!(gmres.k_n, gmres)
     wait(event)
     convert_structure!(Q, gmres.x, gmres.reshape_tuple_b, gmres.permute_tuple_b)
