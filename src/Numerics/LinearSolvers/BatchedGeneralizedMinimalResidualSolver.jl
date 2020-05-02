@@ -1,6 +1,6 @@
-module IndGenMinResSolver
+module BatchedGeneralizedMinimalResidualSolver
 
-export IndGenMinRes
+export BatchedGeneralizedMinimalResidual
 
 using ..LinearSolvers
 const LS = LinearSolvers
@@ -42,7 +42,7 @@ Solving n linear systems iteratively
 - Too much memory in H and R struct: Could use a sparse representation to cut memory use in half (or more)
 - Needs to perform a transpose of original data structure into current data structure: Could perhaps do a transpose free version, but the code gets a bit clunkier and the memory would no longer be coalesced for the heavy operations
 """
-struct IndGenMinRes{FT, IT, VT, AT, TT1, TT2} <: LS.AbstractIterativeLinearSolver
+struct BatchedGeneralizedMinimalResidual{FT, IT, VT, AT, TT1, TT2} <: LS.AbstractIterativeLinearSolver
     atol::FT
     rtol::FT
     m::IT
@@ -64,13 +64,13 @@ struct IndGenMinRes{FT, IT, VT, AT, TT1, TT2} <: LS.AbstractIterativeLinearSolve
 end
 
 # So that the struct can be passed into kernels
-Adapt.adapt_structure(to, x::IndGenMinRes) = IndGenMinRes(x.atol, x.rtol, x.m, x.n, x.k_n, adapt(to, x.residual), adapt(to, x.b), adapt(to, x.x),  adapt(to, x.sol), adapt(to, x.rhs), adapt(to, x.cs),  adapt(to, x.Q),  adapt(to, x.H), adapt(to, x.R), x.reshape_tuple_f, x.permute_tuple_f, x.reshape_tuple_b, x.permute_tuple_b)
+Adapt.adapt_structure(to, x::BatchedGeneralizedMinimalResidual) = BatchedGeneralizedMinimalResidual(x.atol, x.rtol, x.m, x.n, x.k_n, adapt(to, x.residual), adapt(to, x.b), adapt(to, x.x),  adapt(to, x.sol), adapt(to, x.rhs), adapt(to, x.cs),  adapt(to, x.Q),  adapt(to, x.H), adapt(to, x.R), x.reshape_tuple_f, x.permute_tuple_f, x.reshape_tuple_b, x.permute_tuple_b)
 
 """
-IndGenMinRes(Qrhs; m = length(Qrhs[:,1]), n = length(Qrhs[1,:]), subspace_size = m, atol = sqrt(eps(eltype(Qrhs))), rtol = sqrt(eps(eltype(Qrhs))), ArrayType = Array, reshape_tuple_f = size(Qrhs), permute_tuple_f = Tuple(1:length(size(Qrhs))), reshape_tuple_b = size(Qrhs), permute_tuple_b = Tuple(1:length(size(Qrhs))))
+BatchedGeneralizedMinimalResidual(Qrhs; m = length(Qrhs[:,1]), n = length(Qrhs[1,:]), subspace_size = m, atol = sqrt(eps(eltype(Qrhs))), rtol = sqrt(eps(eltype(Qrhs))), ArrayType = Array, reshape_tuple_f = size(Qrhs), permute_tuple_f = Tuple(1:length(size(Qrhs))), reshape_tuple_b = size(Qrhs), permute_tuple_b = Tuple(1:length(size(Qrhs))))
 
 # Description
-Generic constructor for IndGenMinRes
+Generic constructor for BatchedGeneralizedMinimalResidual
 
 # Arguments
 - `Qrhs`: (array) Array structure that linear_operator! acts on
@@ -87,9 +87,9 @@ Generic constructor for IndGenMinRes
 - `permute_tuple_b`: (tuple). used in the wrapper function for flexibility. DEFAULT = Tuple(1:length(size(Qrhs))). this means, don't do anything.
 
 # Return
-instance of IndGenMinRes struct
+instance of BatchedGeneralizedMinimalResidual struct
 """
-function IndGenMinRes(Qrhs; m = size(Qrhs)[1], n = size(Qrhs)[end], subspace_size = m, atol = sqrt(eps(eltype(Qrhs))), rtol = sqrt(eps(eltype(Qrhs))), ArrayType = Array, reshape_tuple_f = size(Qrhs), permute_tuple_f = Tuple(1:length(size(Qrhs))), reshape_tuple_b = size(Qrhs), permute_tuple_b = Tuple(1:length(size(Qrhs))))
+function BatchedGeneralizedMinimalResidual(Qrhs; m = size(Qrhs)[1], n = size(Qrhs)[end], subspace_size = m, atol = sqrt(eps(eltype(Qrhs))), rtol = sqrt(eps(eltype(Qrhs))), ArrayType = Array, reshape_tuple_f = size(Qrhs), permute_tuple_f = Tuple(1:length(size(Qrhs))), reshape_tuple_b = size(Qrhs), permute_tuple_b = Tuple(1:length(size(Qrhs))))
     k_n = subspace_size
     residual = ArrayType(zeros(eltype(Qrhs), (k_n, n)))
     b = ArrayType(zeros(eltype(Qrhs), (m, n)))
@@ -100,20 +100,20 @@ function IndGenMinRes(Qrhs; m = size(Qrhs)[1], n = size(Qrhs)[end], subspace_siz
     Q = ArrayType(zeros(eltype(Qrhs), (m, k_n+1 , n)))
     H = ArrayType(zeros(eltype(Qrhs), (k_n+1, k_n, n)))
     R  = ArrayType(zeros(eltype(Qrhs), (k_n+1, k_n, n)))
-    return IndGenMinRes(atol, rtol, m, n, k_n, residual, b, x, sol, rhs, cs, Q, H, R, reshape_tuple_f, permute_tuple_f, reshape_tuple_b, permute_tuple_b)
+    return BatchedGeneralizedMinimalResidual(atol, rtol, m, n, k_n, residual, b, x, sol, rhs, cs, Q, H, R, reshape_tuple_f, permute_tuple_f, reshape_tuple_b, permute_tuple_b)
 end
 
 # TODO test this with MPIStateArray or create seperate convenience constructor
 
 
 # initialize function (1)
-function LS.initialize!(linearoperator!, Q, Qrhs, solver::IndGenMinRes, args...)
+function LS.initialize!(linearoperator!, Q, Qrhs, solver::BatchedGeneralizedMinimalResidual, args...)
     # body of initialize function in abstract iterative solver
     return false, zero(eltype(Q))
 end
 
 # iteration function (2)
-function LS.doiteration!(linearoperator!, Q, Qrhs, gmres::IndGenMinRes, threshold, args...)
+function LS.doiteration!(linearoperator!, Q, Qrhs, gmres::BatchedGeneralizedMinimalResidual, threshold, args...)
     # initialize gmres.x
     convert_structure!(gmres.x, Q, gmres.reshape_tuple_f, gmres.permute_tuple_f)
     # apply linear operator to construct residual
@@ -300,7 +300,7 @@ Uses the initialize_gmres_kernel! for initalizing
 # Return
 event. A KernelAbstractions object
 """
-function initialize_gmres!(gmres::IndGenMinRes; ndrange = gmres.n, cpu_threads = Threads.nthreads(), gpu_threads = 256)
+function initialize_gmres!(gmres::BatchedGeneralizedMinimalResidual; ndrange = gmres.n, cpu_threads = Threads.nthreads(), gpu_threads = 256)
     if isa(gmres.b, Array)
         kernel! = initialize_gmres_kernel!(CPU(), cpu_threads)
     else
@@ -411,7 +411,7 @@ nothing
 end
 
 """
-initialize_QR!(gmres::IndGenMinRes, I)
+initialize_QR!(gmres::BatchedGeneralizedMinimalResidual, I)
 
 # Description
 initializes the QR decomposition of the UpperHesenberg Matrix

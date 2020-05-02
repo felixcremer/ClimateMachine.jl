@@ -5,7 +5,7 @@ using Random
 using StaticArrays
 using CLIMA
 using CLIMA.LinearSolvers
-using CLIMA.IndGenMinResSolver
+using CLIMA.BatchedGeneralizedMinimalResidualSolver
 using CLIMA.MPIStateArrays
 using CUDAapi
 using Random
@@ -56,7 +56,7 @@ for i in 1:n
     A[i,i,:] .+= 1.0
 end
 ss = size(b)[1]
-gmres = IndGenMinRes(b, ArrayType = ArrayType, subspace_size = ss)
+gmres = BatchedGeneralizedMinimalResidual(b, ArrayType = ArrayType, subspace_size = ss)
 for i in 1:ni
     x[:,i] = A[:, :, i] \ b[:, i]
 end
@@ -101,7 +101,7 @@ function closure_linear_operator_mpi!(A, n1, n2, n3)
     end
 end
 
-gmres = IndGenMinRes(mpi_b, ArrayType = ArrayType, m = n1*n2, n = n3)
+gmres = BatchedGeneralizedMinimalResidual(mpi_b, ArrayType = ArrayType, m = n1*n2, n = n3)
 
 # Now define the linear operator
 linear_operator! = closure_linear_operator_mpi!(mpi_A, size(mpi_A)...)
@@ -169,13 +169,13 @@ reshape_tuple_b = Tuple(tmp_reshape_tuple_b) # as is this if we just use the per
 
 # yeah it isn't pretty, should probably define some convenience function
 # that uses the dg model
-gmres = IndGenMinRes(b, ArrayType = ArrayType, m = tup[3]*tup[5], n = tup[1]*tup[2]*tup[4]*tup[6], reshape_tuple_f = reshape_tuple_f, permute_tuple_f = permute_tuple_f, reshape_tuple_b = reshape_tuple_b, permute_tuple_b = permute_tuple_b, atol = eps(T), rtol = eps(T))
+gmres = BatchedGeneralizedMinimalResidual(b, ArrayType = ArrayType, m = tup[3]*tup[5], n = tup[1]*tup[2]*tup[4]*tup[6], reshape_tuple_f = reshape_tuple_f, permute_tuple_f = permute_tuple_f, reshape_tuple_b = reshape_tuple_b, permute_tuple_b = permute_tuple_b, atol = eps(T), rtol = eps(T))
 
 x_exact = copy(x)
 iters = linearsolve!(columnwise_linear_operator!, gmres, x, b, max_iters = tup[3]*tup[5])
 
 # check that the residual is what is expected
-ar, rr = IndGenMinResSolver.compute_residuals(gmres, iters)
+ar, rr = BatchedGeneralizedMinimalResidualSolver.compute_residuals(gmres, iters)
 converged = (ar < gmres.atol) || (rr < gmres.rtol)
 # sometimes gmres.R[1,1,:] is very large, this means that the rr criteria is satisfied
 
@@ -184,6 +184,6 @@ norm(x - x_exact) / norm(x_exact)
 columnwise_linear_operator!(x_exact, x)
 norm(x_exact - b)/ norm(b)
 
-ar, rr = IndGenMinResSolver.compute_residuals(gmres, iters)
+ar, rr = BatchedGeneralizedMinimalResidualSolver.compute_residuals(gmres, iters)
 (ar < gmres.atol) || (rr < gmres.rtol)
 ###
