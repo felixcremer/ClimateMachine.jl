@@ -560,6 +560,9 @@ Compute atol and rtol of current iteration
 # Return
 - `atol`: (float) absolute tolerance
 - `rtol`: (float) relative tolerance
+
+# Comment
+sometimes gmres.R[1, 1,:] term has some very large components which makes rtol quite small
 """
 function compute_residuals(gmres, i)
     atol = maximum(gmres.residual[i,:])
