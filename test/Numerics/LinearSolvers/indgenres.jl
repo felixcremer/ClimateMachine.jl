@@ -67,7 +67,7 @@ linear_operator! = closure_linear_operator_multi!(A, size(A)...)
 iters = linearsolve!(linear_operator!, gmres, x, b; max_iters = ss)
 display(gmres.residual[79,:])
 linear_operator!(y, x)
-norm(y-b)
+norm(y-b) / norm(b)
 
 ###
 # MPISTateArray test
@@ -108,5 +108,6 @@ linear_operator! = closure_linear_operator_mpi!(mpi_A, size(mpi_A)...)
 # linear_operator!(mpi_x, mpi_b)
 iters = linearsolve!(linear_operator!, gmres, mpi_x, mpi_b; max_iters = n1*n2)
 linear_operator!(mpi_y, mpi_x)
-norm(mpi_y - mpi_b)
+norm(mpi_y - mpi_b) / norm(mpi_b)
 sol = mpi_A[:,:,1] \ mpi_b[:,:, 1][:]
+norm(sol - mpi_x[:,:,1][:])
