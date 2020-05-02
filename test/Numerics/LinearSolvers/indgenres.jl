@@ -13,6 +13,7 @@ using KernelAbstractions
 using CuArrays
 Random.seed!(1235)
 
+
 CLIMA.init();
 ArrayType = CLIMA.array_type() #CHANGE ME FOR GPUS!
 T = Float64
@@ -54,7 +55,8 @@ A = ArrayType(randn((n, n, ni)) ./ sqrt(n) .* 1.0)
 for i in 1:n
     A[i,i,:] .+= 1.0
 end
-gmres = IndGenMinRes(b, ArrayType = ArrayType)
+ss = size(b)[1]
+gmres = IndGenMinRes(b, ArrayType = ArrayType, subspace_size = ss)
 for i in 1:ni
     x[:,i] = A[:, :, i] \ b[:, i]
 end
@@ -62,23 +64,49 @@ sol = copy(x)
 x += ArrayType(randn(n,ni) * 0.01 * maximum(abs.(x)))
 y = copy(x)
 linear_operator! = closure_linear_operator_multi!(A, size(A)...)
-linear_operator!(x, y)
-iters = linearsolve!(linear_operator!, gmres, x, b; max_iters = length(b[:, 1]))
+iters = linearsolve!(linear_operator!, gmres, x, b; max_iters = ss)
 display(gmres.residual[79,:])
+linear_operator!(y, x)
+norm(y-b)
 
 ###
 # MPISTateArray test
-n1 = 4
-n2 = 4
-n3 = 4
+Random.seed!(1235)
+n1 = 3
+n2 = 2
+n3 = 1
 mpi_b = MPIStateArray{T}(mpicomm, ArrayType, n1, n2, n3)
 mpi_x = MPIStateArray{T}(mpicomm, ArrayType, n1, n2, n3)
 mpi_A = ArrayType(randn(n1*n2, n1*n2, n3))
 
+# need to make sure that mpi_b and mpi_x are reproducible
 mpi_b.data[:] .= ArrayType(randn(n1 * n2 * n3))
 mpi_x.data[:] .= ArrayType(randn(n1 * n2 * n3))
+mpi_y = copy(mpi_x)
+#=
+reshape_tuple_f = (n1, n2, n3)
+permute_tuple_f = (1, 2, 3)
+reshape_tuple_b = (n1, n2, n3)
+permute_tuple_b = (1, 2, 3)
+=#
 
-reshape_tuple_f = (Int(n1/2), Int(n1/2), n2, n3)
-permute_tuple_f = (3, 1, 2, 4) #flip the indices
-reshape_tuple_b = (n2, Int(n1/2), Int(n1/2), n3)
-perpute_tuple_b = (3, 1, 2, 4)
+# for defining linear_operator
+function closure_linear_operator_mpi!(A, n1, n2, n3)
+    function linear_operator!(x, y)
+        alias_x = reshape(x.data,(n1, n3))
+        alias_y = reshape(y.data,(n1, n3))
+        event = multiply_by_A!(alias_x, A, alias_y, n1, n2, ndrange = n3)
+        wait(event)
+        return nothing
+    end
+end
+
+gmres = IndGenMinRes(mpi_b, ArrayType = ArrayType, m = n1*n2, n = n3)
+
+# Now define the linear operator
+linear_operator! = closure_linear_operator_mpi!(mpi_A, size(mpi_A)...)
+# linear_operator!(mpi_x, mpi_b)
+iters = linearsolve!(linear_operator!, gmres, mpi_x, mpi_b; max_iters = n1*n2)
+linear_operator!(mpi_y, mpi_x)
+norm(mpi_y - mpi_b)
+sol = mpi_A[:,:,1] \ mpi_b[:,:, 1][:]

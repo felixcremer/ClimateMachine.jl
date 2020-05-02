@@ -76,8 +76,8 @@ Generic constructor for IndGenMinRes
 - `Qrhs`: (array) Array structure that linear_operator! acts on
 
 # Keyword Arguments
-- `m`: (int) size of vector space for each independent linear solve. This is assumed to be the same for each and every linear solve. DEFAULT = length(Qrhs[:,1])
-- `n`: (int) number of independent linear solves, DEFAULT = length(Qrhs[1,:])
+- `m`: (int) size of vector space for each independent linear solve. This is assumed to be the same for each and every linear solve. DEFAULT = size(Qrhs)[1]
+- `n`: (int) number of independent linear solves, DEFAULT = size(Qrhs)[end]
 - `atol`: (float) absolute tolerance. DEFAULT = sqrt(eps(eltype(Qrhs)))
 - `rtol`: (float) relative tolerance. DEFAULT = sqrt(eps(eltype(Qrhs)))
 - `ArrayType`: (type). used for either using CuArrays or Arrays. DEFAULT = Array
@@ -89,7 +89,7 @@ Generic constructor for IndGenMinRes
 # Return
 instance of IndGenMinRes struct
 """
-function IndGenMinRes(Qrhs; m = length(Qrhs[:,1]), n = length(Qrhs[1,:]), subspace_size = m, atol = sqrt(eps(eltype(Qrhs))), rtol = sqrt(eps(eltype(Qrhs))), ArrayType = Array, reshape_tuple_f = size(Qrhs), permute_tuple_f = Tuple(1:length(size(Qrhs))), reshape_tuple_b = size(Qrhs), permute_tuple_b = Tuple(1:length(size(Qrhs))))
+function IndGenMinRes(Qrhs; m = size(Qrhs)[1], n = size(Qrhs)[end], subspace_size = m, atol = sqrt(eps(eltype(Qrhs))), rtol = sqrt(eps(eltype(Qrhs))), ArrayType = Array, reshape_tuple_f = size(Qrhs), permute_tuple_f = Tuple(1:length(size(Qrhs))), reshape_tuple_b = size(Qrhs), permute_tuple_b = Tuple(1:length(size(Qrhs))))
     k_n = subspace_size
     residual = ArrayType(zeros(eltype(Qrhs), (k_n, n)))
     b = ArrayType(zeros(eltype(Qrhs), (m, n)))
@@ -117,8 +117,9 @@ function LS.doiteration!(linearoperator!, Q, Qrhs, gmres::IndGenMinRes, threshol
     # initialize gmres.x
     convert_structure!(gmres.x, Q, gmres.reshape_tuple_f, gmres.permute_tuple_f)
     # apply linear operator to construct residual
-    linearoperator!(Q, Qrhs, args...)
-    r_vector = Qrhs .- Q
+    r_vector = copy(Q)
+    linearoperator!(r_vector, Q, args...)
+    @. r_vector = Qrhs - r_vector
     # The following ar and rr are technically not correct in general cases
     ar = norm(r_vector)
     rr = norm(r_vector) / norm(Qrhs)
@@ -133,6 +134,7 @@ function LS.doiteration!(linearoperator!, Q, Qrhs, gmres::IndGenMinRes, threshol
     # initialize gmres.sol
     convert_structure!(gmres.sol, Q, gmres.reshape_tuple_f, gmres.permute_tuple_f)
     # initialize the rest of gmres
+
     event = initialize_gmres!(gmres)
     wait(event)
     ar, rr = compute_residuals(gmres, 1)
@@ -159,6 +161,7 @@ function LS.doiteration!(linearoperator!, Q, Qrhs, gmres::IndGenMinRes, threshol
             return true, i, ar
         end
     end
+    
     event = construct_solution!(gmres.k_n, gmres)
     wait(event)
     convert_structure!(Q, gmres.x, gmres.reshape_tuple_b, gmres.permute_tuple_b)
