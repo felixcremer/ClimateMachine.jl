@@ -61,19 +61,113 @@ y = [y1 y2];
 x = copy(y);
 linear_operator!(x,y);
 display(x)
-display([A1*y1 A2*y2])
 # We see that the first column is A1 * [1 1 1]'
 # and the second column is A2 * [2 2 2]'
+# that is,
+display([A1*y1 A2*y2])
 
 # We are now ready to set up our BatchedGMRES solver
-
-
-# Now we can set up the ConjugateGradient struct
-linearsolver = ConjugateGradient(b, max_iter = 100);
-.
-# We need to define an initial guess for each linear system
+# Since we have just set up our linear operator we must now set up the
+# right hand side of the linear system
+b = [b1 b2]
+# as well as the exact solution, (to verify that the method does indeed converge)
+x_exact = [x1_exact x2_exact]
+# For the BatchedGMRES solver it is assumed that each column of b is independent
+# We now use the great an instance of the solver
+linearsolver = BatchedGeneralizedMinimalResidual(b)
+# As well as an intial guess, denoted by the variable x
 x1 = ones(typeof(1.0), 3);
 x2 = ones(typeof(1.0), 3);
-x = [x1 x2]
+x = [x1 x2];
 # To solve the linear system we just need to pass to the linearsolve! function
 iters = linearsolve!(linear_operator!, linearsolver, x, b)
+# Which is gauranteed to converge in 3 iterations since length(b1)=length(b2)=3
+# We can now check that the solution that we computed, x
+display(x)
+# has converged to the exact solution
+display(x_exact)
+# Which indeed it has.
+# ## Advanced Example
+
+# We now go through a more advanced application of the Batched GMRES solver
+# The first thing we do is define a linear operator that mimics
+# the behavior of a columnwise operator in CLIMA
+function closure_linear_operator!(A, tup)
+    function linear_operator!(y, x)
+        alias_x = reshape(x, tup)
+        alias_y = reshape(y, tup)
+        for i6 in 1:tup[6]
+            for i4 in 1:tup[4]
+                for i2 in 1:tup[2]
+                    for i1 in 1:tup[1]
+                        tmp = alias_x[i1, i2, :, i4, :, i6][:]
+                        tmp2 = A[i1, i2, i4, i6] * tmp
+                        alias_y[i1, i2, :, i4, :, i6] .=
+                            reshape(tmp2, (tup[3], tup[5]))
+                    end
+                end
+            end
+        end
+    end
+end
+# Next we define the array structure of an MPIStateArray
+# in its true high dimensional form
+tup = (2, 2, 4, 2, 5, 2);
+# We define our linear operator as a random matrix
+Random.seed!(1234)
+B = [
+    randn(tup[3] * tup[5], tup[3] * tup[5])
+    for i1 in 1:tup[1], i2 in 1:tup[2], i4 in 1:tup[4], i6 in 1:tup[6]
+];
+columnwise_A = [
+    B[i1, i2, i4, i6] + 10I
+    for i1 in 1:tup[1], i2 in 1:tup[2], i4 in 1:tup[4], i6 in 1:tup[6]
+];
+# as well as its inverse
+columnwise_inv_A = [
+    inv(columnwise_A[i1, i2, i4, i6])
+    for i1 in 1:tup[1], i2 in 1:tup[2], i4 in 1:tup[4], i6 in 1:tup[6]
+];
+columnwise_linear_operator! = closure_linear_operator!(columnwise_A, tup);
+columnwise_inverse_linear_operator! =
+    closure_linear_operator!(columnwise_inv_A, tup);
+# The structure of an MPIStateArray is related to its true
+# higher dimenionsal form as follows;
+mpi_tup = (tup[1] * tup[2] * tup[3], tup[4], tup[5] * tup[6])
+# We now define the right hand side of our Linear system
+b = randn(mpi_tup)
+# As well as the initial guess
+x = copy(b)
+x += randn(mpi_tup) * 0.1
+# In the previous tutorial we mentioned that it is assumed that
+# the right hand side is an array whose column vectors all independent linear
+# systems. But right now the array structure of $x$ and $b$ do not follow
+# this requirement.
+# To handle this case we must pass in additional arguments that tell the
+# linear solver how to reconcile these differences.
+# The first thing that the linear solver must know of is the higher tensor
+# form of the MPIStateArray, which is just the `tup` from before
+reshape_tuple_f = tup
+# The second thing it needs to know is which indices correspond to a column
+# and we want to make sure that these are the first set of indices that appear
+# in the permutatation tuple (which can be thought of as enacting
+# a Tensor Transpose).
+permute_tuple_f = (3,5,1,4,2,6) # make the column indices the fast indices
+# It has this format since the 3 and 5 index slots
+# are the ones associated with traversing a column
+
+# that uses the dg model
+gmres = BatchedGeneralizedMinimalResidual(b, ArrayType = ArrayType, m = tup[3]*tup[5], n = tup[1]*tup[2]*tup[4]*tup[6], reshape_tuple_f = reshape_tuple_f, permute_tuple_f = permute_tuple_f, reshape_tuple_b = reshape_tuple_b, permute_tuple_b = permute_tuple_b, atol = eps(T), rtol = eps(T))
+
+x_exact = copy(x)
+iters = linearsolve!(columnwise_linear_operator!, gmres, x, b, max_iters = tup[3]*tup[5])
+
+# check that the residual is what is expected
+ar, rr = BatchedGeneralizedMinimalResidualSolver.compute_residuals(gmres, iters)
+converged = (ar < gmres.atol) || (rr < gmres.rtol)
+# sometimes gmres.R[1,1,:] is very large, this means that the rr criteria is satisfied
+
+columnwise_inverse_linear_operator!(x_exact, b)
+norm(x - x_exact) / norm(x_exact)
+columnwise_linear_operator!(x_exact, x)
+norm(x_exact - b)/ norm(b)

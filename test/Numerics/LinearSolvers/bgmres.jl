@@ -162,14 +162,10 @@ x += randn((tup[1] * tup[2] * tup[3], tup[4], tup[5] * tup[6])) * 0.1
 
 reshape_tuple_f = tup
 permute_tuple_f = (3,5,1,4,2,6) # make the column indices the fast indices
-permute_tuple_b = permute_tuple_f # okay so permute tuple back is redundant ...
-tmp_reshape_tuple_b = [tup...]
-permute!(tmp_reshape_tuple_b, [permute_tuple_f...])
-reshape_tuple_b = Tuple(tmp_reshape_tuple_b) # as is this if we just use the permute rules
 
 # yeah it isn't pretty, should probably define some convenience function
 # that uses the dg model
-gmres = BatchedGeneralizedMinimalResidual(b, ArrayType = ArrayType, m = tup[3]*tup[5], n = tup[1]*tup[2]*tup[4]*tup[6], reshape_tuple_f = reshape_tuple_f, permute_tuple_f = permute_tuple_f, reshape_tuple_b = reshape_tuple_b, permute_tuple_b = permute_tuple_b, atol = eps(T), rtol = eps(T))
+gmres = BatchedGeneralizedMinimalResidual(b, ArrayType = ArrayType, m = tup[3]*tup[5], n = tup[1]*tup[2]*tup[4]*tup[6], reshape_tuple_f = reshape_tuple_f, permute_tuple_f = permute_tuple_f, atol = eps(T), rtol = eps(T))
 
 x_exact = copy(x)
 iters = linearsolve!(columnwise_linear_operator!, gmres, x, b, max_iters = tup[3]*tup[5])
@@ -186,4 +182,3 @@ norm(x_exact - b)/ norm(b)
 
 ar, rr = BatchedGeneralizedMinimalResidualSolver.compute_residuals(gmres, iters)
 (ar < gmres.atol) || (rr < gmres.rtol)
-###

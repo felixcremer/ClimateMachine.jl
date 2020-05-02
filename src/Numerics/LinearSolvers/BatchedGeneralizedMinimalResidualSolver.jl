@@ -83,14 +83,18 @@ Generic constructor for BatchedGeneralizedMinimalResidual
 - `ArrayType`: (type). used for either using CuArrays or Arrays. DEFAULT = Array
 - `reshape_tuple_f`: (tuple). used in the wrapper function for flexibility. DEFAULT = size(Qrhs). this means don't do anything
 - `permute_tuple_f`: (tuple). used in the wrapper function for flexibility. DEFAULT = Tuple(1:length(size(Qrhs))). this means, don't do anything.
-- `reshape_tuple_b`: (tuple). used in the wrapper function for flexibility. DEFAULT = size(Qrhs). this means don't do anything
-- `permute_tuple_b`: (tuple). used in the wrapper function for flexibility. DEFAULT = Tuple(1:length(size(Qrhs))). this means, don't do anything.
 
 # Return
 instance of BatchedGeneralizedMinimalResidual struct
 """
-function BatchedGeneralizedMinimalResidual(Qrhs; m = size(Qrhs)[1], n = size(Qrhs)[end], subspace_size = m, atol = sqrt(eps(eltype(Qrhs))), rtol = sqrt(eps(eltype(Qrhs))), ArrayType = Array, reshape_tuple_f = size(Qrhs), permute_tuple_f = Tuple(1:length(size(Qrhs))), reshape_tuple_b = size(Qrhs), permute_tuple_b = Tuple(1:length(size(Qrhs))))
+function BatchedGeneralizedMinimalResidual(Qrhs; m = size(Qrhs)[1], n = size(Qrhs)[end], subspace_size = m, atol = sqrt(eps(eltype(Qrhs))), rtol = sqrt(eps(eltype(Qrhs))), ArrayType = Array, reshape_tuple_f = size(Qrhs), permute_tuple_f = Tuple(1:length(size(Qrhs))))
     k_n = subspace_size
+    # define the back permutations and reshapes
+    permute_tuple_b = permute_tuple_f
+    tmp_reshape_tuple_b = [reshape_tuple_f...]
+    permute!(tmp_reshape_tuple_b, [permute_tuple_f...])
+    reshape_tuple_b = Tuple(tmp_reshape_tuple_b)
+    # allocate memory
     residual = ArrayType(zeros(eltype(Qrhs), (k_n, n)))
     b = ArrayType(zeros(eltype(Qrhs), (m, n)))
     x = ArrayType(zeros(eltype(Qrhs), (m, n)))
