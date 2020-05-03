@@ -206,7 +206,7 @@ A naive kernel version of this operation is too slow
     return nothing
 end
 
-# TODO test these with MPIStateArray
+# MPIStateArray dispatch
 @inline convert_structure!(x, y::MPIStateArray, reshape_tuple, permute_tuple) = convert_structure!(x, y.data, reshape_tuple, permute_tuple)
 @inline convert_structure!(x::MPIStateArray, y, reshape_tuple, permute_tuple) = convert_structure!(x.data, y, reshape_tuple, permute_tuple)
 
@@ -229,7 +229,6 @@ It is assumed that the first two krylov vectors are already constructed
 # Return
 (implicitly) kernel abstractions function closure
 """
-# m, n, k_n, residual, b, x, sol, rhs, cs, Q, H, R
 @kernel function initialize_gmres_kernel!(gmres)
     I = @index(Global)
     initialize_arnoldi!(gmres, I)

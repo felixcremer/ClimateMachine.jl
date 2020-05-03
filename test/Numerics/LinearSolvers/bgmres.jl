@@ -14,10 +14,13 @@ using CuArrays
 Random.seed!(1235)
 
 
+# Initialize
 CLIMA.init();
 ArrayType = CLIMA.array_type() #CHANGE ME FOR GPUS!
 T = Float64
 mpicomm = MPI.COMM_WORLD
+# set the error threshold
+const err_thresh = 1e-8
 
 @kernel function multiply_A_kernel!(x, A, y, n1, n2)
     I = @index(Global)
@@ -31,7 +34,7 @@ mpicomm = MPI.COMM_WORLD
 end
 
 function multiply_by_A!(x, A, y, n1, n2; ndrange = size(x[1,:]), cpu_threads = Threads.nthreads(), gpu_threads = 256)
-    if isa(x,Array)
+    if isa(x, Array)
         kernel! = multiply_A_kernel!(CPU(), cpu_threads)
     else
         kernel! = multiply_A_kernel!(CUDA(), gpu_threads)
@@ -46,6 +49,8 @@ function closure_linear_operator_multi!(A, n1, n2, n3)
         return nothing
     end
 end
+
+# Test 1: Basic Functionality
 
 n  = 100  # size of vector space
 ni = 10 # number of independent linear solves
@@ -65,12 +70,13 @@ x += ArrayType(randn(n,ni) * 0.01 * maximum(abs.(x)))
 y = copy(x)
 linear_operator! = closure_linear_operator_multi!(A, size(A)...)
 iters = linearsolve!(linear_operator!, gmres, x, b; max_iters = ss)
-display(gmres.residual[79,:])
 linear_operator!(y, x)
-norm(y-b) / norm(b)
-
+@testset "Basic Test" begin
+    @test norm(y-b) / norm(b) < err_thresh
+end
 ###
-# MPISTateArray test
+# Test 2: MPIStateArray test
+
 Random.seed!(1235)
 n1 = 8
 n2 = 3
@@ -83,12 +89,6 @@ mpi_A = ArrayType(randn(n1*n2, n1*n2, n3))
 mpi_b.data[:] .= ArrayType(randn(n1 * n2 * n3))
 mpi_x.data[:] .= ArrayType(randn(n1 * n2 * n3))
 mpi_y = copy(mpi_x)
-#=
-reshape_tuple_f = (n1, n2, n3)
-permute_tuple_f = (1, 2, 3)
-reshape_tuple_b = (n1, n2, n3)
-permute_tuple_b = (1, 2, 3)
-=#
 
 # for defining linear_operator
 function closure_linear_operator_mpi!(A, n1, n2, n3)
@@ -105,14 +105,17 @@ gmres = BatchedGeneralizedMinimalResidual(mpi_b, ArrayType = ArrayType, m = n1*n
 
 # Now define the linear operator
 linear_operator! = closure_linear_operator_mpi!(mpi_A, size(mpi_A)...)
-# linear_operator!(mpi_x, mpi_b)
 iters = linearsolve!(linear_operator!, gmres, mpi_x, mpi_b; max_iters = n1*n2)
 linear_operator!(mpi_y, mpi_x)
-norm(mpi_y - mpi_b) / norm(mpi_b)
+# check one in the batch
 sol = mpi_A[:,:,1] \ mpi_b[:,:, 1][:]
-norm(sol - mpi_x[:,:,1][:])
+@testset "MPIStateArray Test" begin
+    @test norm(mpi_y - mpi_b) / norm(mpi_b) < err_thresh
+    @test norm(sol - mpi_x[:,:,1][:]) < err_thresh
+end
 
 ###
+# Test 3: Columnwise test
 # now need to try the columnwise test
 Random.seed!(1235)
 # ## More Complex Example
@@ -135,7 +138,7 @@ function closure_linear_operator!(A, tup)
     end
 end
 
-tup = (3, 4, 7, 2, 20, 2)
+tup = (3, 4, 7, 6, 5, 2)
 
 B = [
     randn(tup[3] * tup[5], tup[3] * tup[5])
@@ -170,15 +173,9 @@ gmres = BatchedGeneralizedMinimalResidual(b, ArrayType = ArrayType, m = tup[3]*t
 x_exact = copy(x)
 iters = linearsolve!(columnwise_linear_operator!, gmres, x, b, max_iters = tup[3]*tup[5])
 
-# check that the residual is what is expected
-ar, rr = BatchedGeneralizedMinimalResidualSolver.compute_residuals(gmres, iters)
-converged = (ar < gmres.atol) || (rr < gmres.rtol)
-# sometimes gmres.R[1,1,:] is very large, this means that the rr criteria is satisfied
-
-columnwise_inverse_linear_operator!(x_exact, b)
-norm(x - x_exact) / norm(x_exact)
-columnwise_linear_operator!(x_exact, x)
-norm(x_exact - b)/ norm(b)
-
-ar, rr = BatchedGeneralizedMinimalResidualSolver.compute_residuals(gmres, iters)
-(ar < gmres.atol) || (rr < gmres.rtol)
+@testset "Columnwise Test" begin
+    columnwise_inverse_linear_operator!(x_exact, b)
+    @test norm(x - x_exact) / norm(x_exact) < err_thresh
+    columnwise_linear_operator!(x_exact, x)
+    @test norm(x_exact - b)/ norm(b) < err_thresh
+end
