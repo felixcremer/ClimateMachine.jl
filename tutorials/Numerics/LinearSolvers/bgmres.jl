@@ -17,7 +17,7 @@
 # ## Basic Example
 # First we must load a few things
 using CLIMA, CLIMA.LinearSolvers, CLIMA.BatchedGeneralizedMinimalResidualSolver
-using LinearAlgebra, Random
+using LinearAlgebra, Random, Plots
 
 # Next we define two linear systems that we would like to solve simultaneously
 # The matrix for the first linear system is
@@ -112,7 +112,7 @@ function closure_linear_operator!(A, tup)
 end
 # Next we define the array structure of an MPIStateArray
 # in its true high dimensional form
-tup = (2, 2, 4, 2, 5, 2);
+tup = (2, 2, 5, 2, 10, 2);
 # We define our linear operator as a random matrix
 Random.seed!(1234)
 B = [
@@ -120,7 +120,7 @@ B = [
     for i1 in 1:tup[1], i2 in 1:tup[2], i4 in 1:tup[4], i6 in 1:tup[6]
 ];
 columnwise_A = [
-    B[i1, i2, i4, i6] + 10I
+    B[i1, i2, i4, i6] + 3*(i1+i2+i4+i6)*I
     for i1 in 1:tup[1], i2 in 1:tup[2], i4 in 1:tup[4], i6 in 1:tup[6]
 ];
 # as well as its inverse
@@ -155,19 +155,32 @@ reshape_tuple_f = tup
 permute_tuple_f = (3,5,1,4,2,6) # make the column indices the fast indices
 # It has this format since the 3 and 5 index slots
 # are the ones associated with traversing a column
+# We also need to tell our solver whether or not it is performing a GPU
+ArrayType = Array
 
-# that uses the dg model
-gmres = BatchedGeneralizedMinimalResidual(b, ArrayType = ArrayType, m = tup[3]*tup[5], n = tup[1]*tup[2]*tup[4]*tup[6], reshape_tuple_f = reshape_tuple_f, permute_tuple_f = permute_tuple_f, reshape_tuple_b = reshape_tuple_b, permute_tuple_b = permute_tuple_b, atol = eps(T), rtol = eps(T))
+# We are now ready to finally define our linear solver, which uses a number
+# of keyword arguments
+gmres = BatchedGeneralizedMinimalResidual(b, ArrayType = ArrayType, m = tup[3]*tup[5], n = tup[1]*tup[2]*tup[4]*tup[6], reshape_tuple_f = reshape_tuple_f, permute_tuple_f = permute_tuple_f, atol = eps(Float64)*10^2, rtol = eps(Float64)*10^2)
+# m is the number of gridpoints along a column. As mentioned previously,
+# this is tup[3]*tup[5]. The n term corresponds to the batch size
+# or the number of columns in this case. atol and rtol are relative and
+# absolute tolerances
 
-x_exact = copy(x)
+# All the hard work is done, now we just call our linear solver
 iters = linearsolve!(columnwise_linear_operator!, gmres, x, b, max_iters = tup[3]*tup[5])
-
-# check that the residual is what is expected
-ar, rr = BatchedGeneralizedMinimalResidualSolver.compute_residuals(gmres, iters)
-converged = (ar < gmres.atol) || (rr < gmres.rtol)
-# sometimes gmres.R[1,1,:] is very large, this means that the rr criteria is satisfied
-
-columnwise_inverse_linear_operator!(x_exact, b)
+# We see that it converged in less than tup[3]*tup[5] = 50 iterations.
+# Let us verify that it is indeed correct by computing the exact answer
+# numerically and comparing it against the iterative solver.
+x_exact = copy(x);
+columnwise_inverse_linear_operator!(x_exact, b);
+# Now we can compare with some norms
 norm(x - x_exact) / norm(x_exact)
-columnwise_linear_operator!(x_exact, x)
+columnwise_linear_operator!(x_exact, x);
 norm(x_exact - b)/ norm(b)
+# Which we see are small, given our choice of atol and rtol
+# The struct also keeps a record of its convergence rate
+# in the residual member. The convergence rate of each column
+# can be visualized via
+plot(log.(gmres.residual[1:iters,:])/log(10));
+plot!(legend = false, xlims = (1, iters), ylims = (-15, 2));
+plot!(ylabel = "log10 residual", xlabel = "iterations")
