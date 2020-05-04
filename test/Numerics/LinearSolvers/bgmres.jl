@@ -11,14 +11,11 @@ using CUDAapi
 using Random
 using KernelAbstractions
 using CuArrays
+
 Random.seed!(1235)
-
-
-# check this CUDAapi.has_cuda_gpu()
 
 # Initialize
 CLIMA.init();
-ArrayType = CLIMA.array_type() #CHANGE ME FOR GPUS!
 T = Float64
 mpicomm = MPI.COMM_WORLD
 # set the error threshold
