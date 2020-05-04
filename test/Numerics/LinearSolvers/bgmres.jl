@@ -14,6 +14,8 @@ using CuArrays
 Random.seed!(1235)
 
 
+# check this CUDAapi.has_cuda_gpu()
+
 # Initialize
 CLIMA.init();
 ArrayType = CLIMA.array_type() #CHANGE ME FOR GPUS!
@@ -51,7 +53,7 @@ function closure_linear_operator_multi!(A, n1, n2, n3)
 end
 
 # Test 1: Basic Functionality
-
+ArrayType = Array
 n  = 100  # size of vector space
 ni = 10 # number of independent linear solves
 b = ArrayType(randn(n, ni)) # rhs
@@ -71,12 +73,38 @@ y = copy(x)
 linear_operator! = closure_linear_operator_multi!(A, size(A)...)
 iters = linearsolve!(linear_operator!, gmres, x, b; max_iters = ss)
 linear_operator!(y, x)
-@testset "Basic Test" begin
+@testset "(CPU) Basic Test" begin
     @test norm(y-b) / norm(b) < err_thresh
 end
-###
-# Test 2: MPIStateArray test
 
+if CUDAapi.has_cuda_gpu()
+    ArrayType = CuArray
+    n  = 100  # size of vector space
+    ni = 10 # number of independent linear solves
+    b = ArrayType(randn(n, ni)) # rhs
+    x = ArrayType(randn(n, ni)) # initial guess
+    A = ArrayType(randn((n, n, ni)) ./ sqrt(n) .* 1.0)
+    for i in 1:n
+        A[i,i,:] .+= 1.0
+    end
+    ss = size(b)[1]
+    gmres = BatchedGeneralizedMinimalResidual(b, ArrayType = ArrayType, subspace_size = ss)
+    for i in 1:ni
+        x[:,i] = A[:, :, i] \ b[:, i]
+    end
+    sol = copy(x)
+    x += ArrayType(randn(n,ni) * 0.01 * maximum(abs.(x)))
+    y = copy(x)
+    linear_operator! = closure_linear_operator_multi!(A, size(A)...)
+    iters = linearsolve!(linear_operator!, gmres, x, b; max_iters = ss)
+    linear_operator!(y, x)
+    @testset "(GPU) Basic Test" begin
+        @test norm(y-b) / norm(b) < err_thresh
+    end
+end
+###
+# Test 2: MPIStateArray test (CPU)
+ArrayType = Array
 Random.seed!(1235)
 n1 = 8
 n2 = 3
@@ -108,14 +136,54 @@ linear_operator! = closure_linear_operator_mpi!(mpi_A, size(mpi_A)...)
 iters = linearsolve!(linear_operator!, gmres, mpi_x, mpi_b; max_iters = n1*n2)
 linear_operator!(mpi_y, mpi_x)
 # check one in the batch
-sol = mpi_A[:,:,1] \ mpi_b[:,:, 1][:]
-@testset "MPIStateArray Test" begin
-    @test norm(mpi_y - mpi_b) / norm(mpi_b) < err_thresh
-    @test norm(sol - mpi_x[:,:,1][:]) < err_thresh
+sol = mpi_A[:,:,1] \ mpi_b.data[:,:, 1][:]
+@testset "(CPU) MPIStateArray Test" begin
+    @test norm(mpi_y.data - mpi_b.data) / norm(mpi_b) < err_thresh
+    @test norm(sol - mpi_x.data[:,:,1][:]) < err_thresh
+end
+
+if CUDAapi.has_cuda_gpu()
+    ArrayType = CuArray
+    Random.seed!(1235)
+    n1 = 8
+    n2 = 3
+    n3 = 10
+    mpi_b = MPIStateArray{T}(mpicomm, ArrayType, n1, n2, n3)
+    mpi_x = MPIStateArray{T}(mpicomm, ArrayType, n1, n2, n3)
+    mpi_A = ArrayType(randn(n1*n2, n1*n2, n3))
+
+    # need to make sure that mpi_b and mpi_x are reproducible
+    mpi_b.data[:] .= ArrayType(randn(n1 * n2 * n3))
+    mpi_x.data[:] .= ArrayType(randn(n1 * n2 * n3))
+    mpi_y = copy(mpi_x)
+
+    # for defining linear_operator
+    function closure_linear_operator_mpi!(A, n1, n2, n3)
+        function linear_operator!(x, y)
+            alias_x = reshape(x.data,(n1, n3))
+            alias_y = reshape(y.data,(n1, n3))
+            event = multiply_by_A!(alias_x, A, alias_y, n1, n2, ndrange = n3)
+            wait(event)
+            return nothing
+        end
+    end
+
+    gmres = BatchedGeneralizedMinimalResidual(mpi_b, ArrayType = ArrayType, m = n1*n2, n = n3)
+
+    # Now define the linear operator
+    linear_operator! = closure_linear_operator_mpi!(mpi_A, size(mpi_A)...)
+    iters = linearsolve!(linear_operator!, gmres, mpi_x, mpi_b; max_iters = n1*n2)
+    linear_operator!(mpi_y, mpi_x)
+    # check one in the batch
+    sol = mpi_A[:,:,1] \ mpi_b.data[:,:, 1][:]
+    @testset "(GPU) MPIStateArray Test" begin
+        @test norm(mpi_y.data - mpi_b.data) / norm(mpi_b) < err_thresh
+        @test norm(sol - mpi_x.data[:,:,1][:]) < err_thresh
+    end
 end
 
 ###
-# Test 3: Columnwise test
+# Test 3: Columnwise test (CPU ONLY)
 # now need to try the columnwise test
 Random.seed!(1235)
 # ## More Complex Example
@@ -141,7 +209,7 @@ end
 tup = (3, 4, 7, 6, 5, 2)
 
 B = [
-    randn(tup[3] * tup[5], tup[3] * tup[5])
+    ArrayType(randn(tup[3] * tup[5], tup[3] * tup[5]))
     for i1 in 1:tup[1], i2 in 1:tup[2], i4 in 1:tup[4], i6 in 1:tup[6]
 ]
 columnwise_A = [
@@ -164,11 +232,11 @@ columnwise_inverse_linear_operator!(x, b)
 x += randn((tup[1] * tup[2] * tup[3], tup[4], tup[5] * tup[6])) * 0.1
 
 reshape_tuple_f = tup
-permute_tuple_f = (3,5,1,4,2,6) # make the column indices the fast indices
+permute_tuple_f = (3,5,1,4,2,6)
 
 # yeah it isn't pretty, should probably define some convenience function
 # that uses the dg model
-gmres = BatchedGeneralizedMinimalResidual(b, ArrayType = ArrayType, m = tup[3]*tup[5], n = tup[1]*tup[2]*tup[4]*tup[6], reshape_tuple_f = reshape_tuple_f, permute_tuple_f = permute_tuple_f, atol = eps(T), rtol = eps(T))
+gmres = BatchedGeneralizedMinimalResidual(b, m = tup[3]*tup[5], n = tup[1]*tup[2]*tup[4]*tup[6], reshape_tuple_f = reshape_tuple_f, permute_tuple_f = permute_tuple_f, atol = eps(T), rtol = eps(T))
 
 x_exact = copy(x)
 iters = linearsolve!(columnwise_linear_operator!, gmres, x, b, max_iters = tup[3]*tup[5])

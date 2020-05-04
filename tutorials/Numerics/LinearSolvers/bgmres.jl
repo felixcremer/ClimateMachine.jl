@@ -132,7 +132,7 @@ columnwise_linear_operator! = closure_linear_operator!(columnwise_A, tup);
 columnwise_inverse_linear_operator! =
     closure_linear_operator!(columnwise_inv_A, tup);
 # The structure of an MPIStateArray is related to its true
-# higher dimenionsal form as follows;
+# higher dimenionsal form as follows:
 mpi_tup = (tup[1] * tup[2] * tup[3], tup[4], tup[5] * tup[6])
 # We now define the right hand side of our Linear system
 b = randn(mpi_tup)
