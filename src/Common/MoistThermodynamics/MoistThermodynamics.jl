@@ -69,6 +69,7 @@ using CLIMAParameters.Planet
 const APS = AbstractParameterSet
 
 include("states.jl")
+include("profiles.jl")
 include("isentropic.jl")
 
 @inline q_pt_0(::Type{FT}) where {FT} = PhasePartition{FT}(FT(0), FT(0), FT(0))

@@ -43,8 +43,8 @@ include("data_tests.jl")
         _kappa_d = FT(kappa_d(param_set))
 
         # for FT in float_types
-        e_int, ρ, q_tot, q_pt, T, p, θ_liq_ice =
-            MT.tested_convergence_range(param_set, 50, FT)
+        z, e_int, ρ, q_tot, q_pt, T, p, θ_liq_ice =
+            MT.tested_profiles(param_set, 50, FT)
         Φ = FT(1)
         Random.seed!(15)
         perturbation = FT(0.1) * rand(length(T))
@@ -332,8 +332,8 @@ end
 
     for FT in float_types
         rtol = FT(1e-2)
-        e_int, ρ, q_tot, q_pt, T, p, θ_liq_ice =
-            MT.tested_convergence_range(param_set, 50, FT)
+        z, e_int, ρ, q_tot, q_pt, T, p, θ_liq_ice =
+            MT.tested_profiles(param_set, 50, FT)
 
         # PhaseEquil
         ts_exact = PhaseEquil.(Ref(param_set), e_int, ρ, q_tot, 100, FT(1e-4))
@@ -530,8 +530,8 @@ end
 
         _MSLP = FT(MSLP(param_set))
 
-        e_int, ρ, q_tot, q_pt, T, p, θ_liq_ice =
-            MT.tested_convergence_range(param_set, 50, FT)
+        z, e_int, ρ, q_tot, q_pt, T, p, θ_liq_ice =
+            MT.tested_profiles(param_set, 50, FT)
 
         # PhaseDry
         ts = PhaseDry.(Ref(param_set), e_int, ρ)
@@ -710,8 +710,8 @@ end
     # NOTE: `Float32` saturation adjustment tends to have more difficulty
     # with converging to the same tolerances as `Float64`, so they're relaxed here.
     FT = Float32
-    e_int, ρ, q_tot, q_pt, T, p, θ_liq_ice =
-        MT.tested_convergence_range(param_set, 50, FT)
+    z, e_int, ρ, q_tot, q_pt, T, p, θ_liq_ice =
+        MT.tested_profiles(param_set, 50, FT)
 
     ρu = FT[1.0, 2.0, 3.0]
     e_pot = FT(100.0)
@@ -801,8 +801,8 @@ end
 @testset "moist thermodynamics - dry limit" begin
 
     FT = Float64
-    e_int, ρ, q_tot, q_pt, T, p, θ_liq_ice =
-        MT.tested_convergence_range(param_set, 50, FT)
+    z, e_int, ρ, q_tot, q_pt, T, p, θ_liq_ice =
+        MT.tested_profiles(param_set, 50, FT)
 
     # PhasePartition test is noisy, so do this only once:
     ts_dry = PhaseDry(param_set, first(e_int), first(ρ))
