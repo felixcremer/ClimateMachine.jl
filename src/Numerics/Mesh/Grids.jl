@@ -10,7 +10,7 @@ using KernelAbstractions
 export DiscontinuousSpectralElementGrid, AbstractGrid
 export dofs_per_element, arraytype, dimensionality, polynomialorder
 export referencepoints, min_node_distance
-export EveryDirection, HorizontalDirection, VerticalDirection
+export EveryDirection, HorizontalDirection, VerticalDirection, Direction
 
 abstract type Direction end
 struct EveryDirection <: Direction end

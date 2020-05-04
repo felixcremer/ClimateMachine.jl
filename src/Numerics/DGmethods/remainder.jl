@@ -50,7 +50,7 @@ data and arrays are aliased to the `maindg` values.
 function remainder_DGModel(
     maindg::DGModel,
     subsdg::NTuple{NumModels, DGModel};
-    direction = EveryDirection(),
+    direction = maindg.direction,
     numerical_flux_first_order = (
         maindg.numerical_flux_first_order,
         ntuple(i -> subsdg[i].numerical_flux_first_order, length(subsdg)),
@@ -91,6 +91,11 @@ function remainder_DGModel(
 
         @assert num_integrals(subdg.balancelaw, FT) == 0
         @assert num_reverse_integrals(subdg.balancelaw, FT) == 0
+
+        @assert (
+            maindg.direction isa EveryDirection ||
+            maindg.direction === subdg.direction
+        )
     end
 
 

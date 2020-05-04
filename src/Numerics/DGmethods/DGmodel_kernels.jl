@@ -36,7 +36,7 @@ Computational kernel: Evaluate the volume integrals on right-hand side of a
     balance_law::BalanceLaw,
     ::Val{dim},
     ::Val{polyorder},
-    direction,
+    directions::Union{Dir, Tuple{Dir, NTuple{ND, Direction}}},
     tendency,
     state_conservative,
     state_gradient_flux,
@@ -48,8 +48,10 @@ Computational kernel: Evaluate the volume integrals on right-hand side of a
     D,
     elems,
     increment,
-) where {dim, polyorder}
+) where {dim, polyorder, ND, Dir <: Direction}
+
     @uniform begin
+        direction = Dir()
         N = polyorder
         FT = eltype(state_conservative)
         num_state_conservative = number_state_conservative(balance_law, FT)
