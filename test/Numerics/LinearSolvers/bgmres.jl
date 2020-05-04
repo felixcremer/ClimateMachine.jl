@@ -209,7 +209,7 @@ end
 tup = (3, 4, 7, 6, 5, 2)
 
 B = [
-    ArrayType(randn(tup[3] * tup[5], tup[3] * tup[5]))
+    randn(tup[3] * tup[5], tup[3] * tup[5])
     for i1 in 1:tup[1], i2 in 1:tup[2], i4 in 1:tup[4], i6 in 1:tup[6]
 ]
 columnwise_A = [
