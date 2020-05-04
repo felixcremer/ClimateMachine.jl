@@ -1,8 +1,8 @@
 # # Batched Generalized Minimal Residual
 # In this tutorial we describe the basics of using the batched gmres iterative solver
 # At the end you should be able to
-# 1. Use BatchedGMRES to solve a linear system
-# 2. Contruct a column-wise linear solver with BatchedGMRES
+# 1. Use BatchedGeneralizedMinimalResidual to solve batches of linear systems
+# 2. Contruct a columnwise linear solver with BatchedGeneralizedMinimalResidual
 
 # ## What is the Generalized Minimal Residual Method?
 # The  Generalized Minimal Residual Method (GMRES) is a [Krylov subspace](https://en.wikipedia.org/wiki/Krylov_subspace) method for solving linear systems:
@@ -28,7 +28,7 @@ A1 = [
 ];
 # And the right hand side is
 b1 = ones(typeof(1.0), 3);
-# The exact solution to $A1 x1 = b1$ is
+# The exact solution to ``A1 x1 = b1`` is
 x1_exact = [1.5, 2.0, 1.5];
 # The matrix for the first linear system is
 A2 = [
@@ -38,7 +38,7 @@ A2 = [
 ];
 # And the right hand side is
 b2 = ones(typeof(1.0), 3);
-# The exact solution to $A2 x2 = b2$ is
+# The exact solution to ``A2 x2 = b2`` is
 x2_exact = [0.875, 0.75, 0.5];
 
 # We now define a function that performs the action of each linear operator independently
@@ -66,13 +66,15 @@ display(x)
 # that is,
 display([A1*y1 A2*y2])
 
-# We are now ready to set up our BatchedGMRES solver
+# We are now ready to set up our Batched Generalized Minimal Residual solver
 # Since we have just set up our linear operator we must now set up the
 # right hand side of the linear system
 b = [b1 b2]
 # as well as the exact solution, (to verify that the method does indeed converge)
 x_exact = [x1_exact x2_exact]
-# For the BatchedGMRES solver it is assumed that each column of b is independent
+# !!! Warning
+#     For BatchedGeneralizedMinimalResidual the assumption is that each column of b is independent and corresponds to a batch. This will come back later.
+
 # We now use the great an instance of the solver
 linearsolver = BatchedGeneralizedMinimalResidual(b)
 # As well as an intial guess, denoted by the variable x
@@ -89,7 +91,7 @@ display(x_exact)
 # Which indeed it has.
 # ## Advanced Example
 
-# We now go through a more advanced application of the Batched GMRES solver
+# We now go through a more advanced application of the Batched Generalized Minimal Residual solver
 # The first thing we do is define a linear operator that mimics
 # the behavior of a columnwise operator in CLIMA
 function closure_linear_operator!(A, tup)
@@ -141,7 +143,7 @@ x = copy(b)
 x += randn(mpi_tup) * 0.1
 # In the previous tutorial we mentioned that it is assumed that
 # the right hand side is an array whose column vectors all independent linear
-# systems. But right now the array structure of $x$ and $b$ do not follow
+# systems. But right now the array structure of ``x`` and ``b`` do not follow
 # this requirement.
 # To handle this case we must pass in additional arguments that tell the
 # linear solver how to reconcile these differences.
@@ -154,16 +156,16 @@ reshape_tuple_f = tup
 # a Tensor Transpose).
 permute_tuple_f = (3,5,1,4,2,6) # make the column indices the fast indices
 # It has this format since the 3 and 5 index slots
-# are the ones associated with traversing a column
+# are the ones associated with traversing a column.
 # We also need to tell our solver whether or not it is performing a GPU
 ArrayType = Array
 
 # We are now ready to finally define our linear solver, which uses a number
 # of keyword arguments
 gmres = BatchedGeneralizedMinimalResidual(b, ArrayType = ArrayType, m = tup[3]*tup[5], n = tup[1]*tup[2]*tup[4]*tup[6], reshape_tuple_f = reshape_tuple_f, permute_tuple_f = permute_tuple_f, atol = eps(Float64)*10^2, rtol = eps(Float64)*10^2)
-# m is the number of gridpoints along a column. As mentioned previously,
-# this is tup[3]*tup[5]. The n term corresponds to the batch size
-# or the number of columns in this case. atol and rtol are relative and
+# ```m``` is the number of gridpoints along a column. As mentioned previously,
+# this is tup[3]*tup[5]. The ```n``` term corresponds to the batch size
+# or the number of columns in this case. ```atol``` and ```rtol``` are relative and
 # absolute tolerances
 
 # All the hard work is done, now we just call our linear solver
@@ -177,7 +179,7 @@ columnwise_inverse_linear_operator!(x_exact, b);
 norm(x - x_exact) / norm(x_exact)
 columnwise_linear_operator!(x_exact, x);
 norm(x_exact - b)/ norm(b)
-# Which we see are small, given our choice of atol and rtol
+# Which we see are small, given our choice of ```atol``` and ```rtol```
 # The struct also keeps a record of its convergence rate
 # in the residual member. The convergence rate of each column
 # can be visualized via
