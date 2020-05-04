@@ -8,9 +8,11 @@ Compute the "remainder" contribution of the `main` model, after subtracting
 Currently only the `flux_nondiffusive!` and `source!` are handled by the
 remainder model
 """
-struct RemBL{M, S} <: BalanceLaw
+struct RemBL{M, S, MD, SD} <: BalanceLaw
     main::M
     subs::S
+    maindir::MD
+    subsdir::SD
 end
 
 
@@ -18,7 +20,6 @@ end
     remainder_DGModel(
         maindg::DGModel,
         subsdg::NTuple{NumModels, DGModel};
-        direction = EveryDirection(),
         numerical_flux_first_order,
         numerical_flux_second_order,
         numerical_flux_gradient,
@@ -32,7 +33,7 @@ end
 
 Constructs a `DGModel` from the `maindg` model and the tuple of
 `subsdg` models. The concept of a remainder model is that it computes the
-contribution of the main model after subtracting all of the subcomponents.
+contribution of the  model after subtracting all of the subcomponents.
 
 By default the numerical fluxes are set to be a tuple of the main and
 subcomponent numerical fluxes. The main numerical flux is evaluated first and
@@ -50,7 +51,6 @@ data and arrays are aliased to the `maindg` values.
 function remainder_DGModel(
     maindg::DGModel,
     subsdg::NTuple{NumModels, DGModel};
-    direction = maindg.direction,
     numerical_flux_first_order = (
         maindg.numerical_flux_first_order,
         ntuple(i -> subsdg[i].numerical_flux_first_order, length(subsdg)),
@@ -69,10 +69,6 @@ function remainder_DGModel(
     diffusion_direction = maindg.diffusion_direction,
     modeldata = maindg.modeldata,
 ) where {NumModels}
-    balancelaw = RemBL(
-        maindg.balancelaw,
-        ntuple(i -> subsdg[i].balancelaw, length(subsdg)),
-    )
     FT = eltype(state_auxiliary)
 
     # If any of these asserts fail, the remainder model will need to be extended
@@ -89,6 +85,9 @@ function remainder_DGModel(
         @assert num_gradient_laplacian(subdg.balancelaw, FT) == 0
         @assert num_hyperdiffusive(subdg.balancelaw, FT) == 0
 
+        # Do not currenlty support nested remainder models
+        @assert !(subdg.balancelaw isa RemBL)
+
         @assert num_integrals(subdg.balancelaw, FT) == 0
         @assert num_reverse_integrals(subdg.balancelaw, FT) == 0
 
@@ -97,6 +96,12 @@ function remainder_DGModel(
             maindg.direction === subdg.direction
         )
     end
+    balancelaw = RemBL(
+        maindg.balancelaw,
+        ntuple(i -> subsdg[i].balancelaw, length(subsdg)),
+        maindg.direction,
+        ntuple(i -> subsdg[i].direction, length(subsdg)),
+    )
 
 
     DGModel(
@@ -108,7 +113,7 @@ function remainder_DGModel(
         state_auxiliary,
         state_gradient_flux,
         states_higher_order,
-        direction,
+        maindg.direction,
         diffusion_direction,
         modeldata,
     )
@@ -185,17 +190,24 @@ function flux_first_order!(
     state::Vars,
     aux::Vars,
     t::Real,
+    direction = rem.maindir,
 )
     m = getfield(flux, :array)
-    flux_first_order!(rem.main, flux, state, aux, t)
+    if direction == rem.maindir
+        flux_first_order!(rem.main, flux, state, aux, t)
+    end
 
     flux_s = similar(flux)
     m_s = getfield(flux_s, :array)
 
-    for sub in rem.subs
-        fill!(m_s, 0)
-        flux_first_order!(sub, flux_s, state, aux, t)
-        m .-= m_s
+    @unroll for k in 1:length(rem.subs)
+        @inbounds if direction == rem.subsdir[k]
+            @inbounds sub = rem.subs[k]
+
+            fill!(m_s, 0)
+            flux_first_order!(sub, flux_s, state, aux, t)
+            m .-= m_s
+        end
     end
     nothing
 end

@@ -36,7 +36,7 @@ Computational kernel: Evaluate the volume integrals on right-hand side of a
     balance_law::BalanceLaw,
     ::Val{dim},
     ::Val{polyorder},
-    directions::Union{Dir, Tuple{Dir, NTuple{ND, Direction}}},
+    ::Union{Dir, Tuple{Dir, NTuple{ND, Direction}}},
     tendency,
     state_conservative,
     state_gradient_flux,
@@ -189,6 +189,80 @@ Computational kernel: Evaluate the volume integrals on right-hand side of a
                 end
                 if dim == 3 && direction isa EveryDirection
                     local_flux_3[s] = M * (ξ3x1 * F1 + ξ3x2 * F2 + ξ3x3 * F3)
+                end
+            end
+
+            # In the case of the remainder model we may need to loop through the
+            # models to add in restricted direction componennts
+            if direction isa EveryDirection && balance_law isa RemBL
+                if HorizontalDirection() in balance_law.subsdir
+                    fill!(local_flux, -zero(eltype(local_flux)))
+                    flux_second_order!(
+                        balance_law,
+                        Grad{vars_state_conservative(balance_law, FT)}(
+                            local_flux,
+                        ),
+                        Vars{vars_state_conservative(balance_law, FT)}(
+                            local_state_conservative,
+                        ),
+                        Vars{vars_state_gradient_flux(balance_law, FT)}(
+                            local_state_gradient_flux,
+                        ),
+                        Vars{vars_hyperdiffusive(balance_law, FT)}(
+                            local_state_hyperdiffusion,
+                        ),
+                        Vars{vars_state_auxiliary(balance_law, FT)}(
+                            local_state_auxiliary,
+                        ),
+                        t,
+                        HorizontalDirection(),
+                    )
+                    @unroll for s in 1:num_state_conservative
+                        F1, F2, F3 =
+                            local_flux[1, s], local_flux[2, s], local_flux[3, s]
+                        shared_flux[1, i, j, s] +=
+                            M * (ξ1x1 * F1 + ξ1x2 * F2 + ξ1x3 * F3)
+                        if dim == 3
+                            shared_flux[2, i, j, s] +=
+                                M * (ξ2x1 * F1 + ξ2x2 * F2 + ξ2x3 * F3)
+                        end
+                    end
+                end
+                if VerticalDirection() in balance_law.subsdir
+                    fill!(local_flux, -zero(eltype(local_flux)))
+                    flux_second_order!(
+                        balance_law,
+                        Grad{vars_state_conservative(balance_law, FT)}(
+                            local_flux,
+                        ),
+                        Vars{vars_state_conservative(balance_law, FT)}(
+                            local_state_conservative,
+                        ),
+                        Vars{vars_state_gradient_flux(balance_law, FT)}(
+                            local_state_gradient_flux,
+                        ),
+                        Vars{vars_hyperdiffusive(balance_law, FT)}(
+                            local_state_hyperdiffusion,
+                        ),
+                        Vars{vars_state_auxiliary(balance_law, FT)}(
+                            local_state_auxiliary,
+                        ),
+                        t,
+                        VerticalDirection(),
+                    )
+                    @unroll for s in 1:num_state_conservative
+                        F1, F2, F3 =
+                            local_flux[1, s], local_flux[2, s], local_flux[3, s]
+                        shared_flux[1, i, j, s] +=
+                            M * (ξ1x1 * F1 + ξ1x2 * F2 + ξ1x3 * F3)
+                        if dim == 2
+                            shared_flux[2, i, j, s] +=
+                                M * (ξ2x1 * F1 + ξ2x2 * F2 + ξ2x3 * F3)
+                        elseif dim == 3
+                            local_flux_3[s] =
+                                M * (ξ3x1 * F1 + ξ3x2 * F2 + ξ3x3 * F3)
+                        end
+                    end
                 end
             end
 
