@@ -12,6 +12,7 @@ using Random
 using KernelAbstractions
 using CuArrays
 
+# TODO place in let block
 Random.seed!(1235)
 
 # Initialize
@@ -181,7 +182,6 @@ end
 
 ###
 # Test 3: Columnwise test (CPU ONLY)
-# now need to try the columnwise test
 Random.seed!(1235)
 # ## More Complex Example
 function closure_linear_operator!(A, tup)
@@ -231,14 +231,12 @@ x += randn((tup[1] * tup[2] * tup[3], tup[4], tup[5] * tup[6])) * 0.1
 reshape_tuple_f = tup
 permute_tuple_f = (3,5,1,4,2,6)
 
-# yeah it isn't pretty, should probably define some convenience function
-# that uses the dg model
 gmres = BatchedGeneralizedMinimalResidual(b, m = tup[3]*tup[5], n = tup[1]*tup[2]*tup[4]*tup[6], reshape_tuple_f = reshape_tuple_f, permute_tuple_f = permute_tuple_f, atol = eps(T), rtol = eps(T))
 
 x_exact = copy(x)
 iters = linearsolve!(columnwise_linear_operator!, gmres, x, b, max_iters = tup[3]*tup[5])
 
-@testset "Columnwise Test" begin
+@testset "(CPU) Columnwise Test" begin
     columnwise_inverse_linear_operator!(x_exact, b)
     @test norm(x - x_exact) / norm(x_exact) < err_thresh
     columnwise_linear_operator!(x_exact, x)
