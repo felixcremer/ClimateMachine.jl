@@ -299,6 +299,7 @@ balance law the main components numerical flux is evaluated then all the
 subcomponent numerical fluxes are evaluated and subtracted.
 """
 function numerical_flux_first_order!(
+    face_direction,
     numerical_fluxes::Tuple{
         NumericalFluxFirstOrder,
         NTuple{NumSubFluxes, NumericalFluxFirstOrder},
@@ -313,17 +314,20 @@ function numerical_flux_first_order!(
     x...,
 ) where {NumSubFluxes, S, A}
     # Call the numerical flux for the main model
-    @inbounds numerical_flux_first_order!(
-        numerical_fluxes[1],
-        rem_balance_law.main,
-        fluxᵀn,
-        normal_vector,
-        state_conservative⁻,
-        state_auxiliary⁻,
-        state_conservative⁺,
-        state_auxiliary⁺,
-        x...,
-    )
+    if rem_balance_law.maindir isa EveryDirection ||
+       rem_balance_law.maindir == direction
+        @inbounds numerical_flux_first_order!(
+            numerical_fluxes[1],
+            rem_balance_law.main,
+            fluxᵀn,
+            normal_vector,
+            state_conservative⁻,
+            state_auxiliary⁻,
+            state_conservative⁺,
+            state_auxiliary⁺,
+            x...,
+        )
+    end
 
     # Create put the sub model fluxes
     a_fluxᵀn = getfield(fluxᵀn, :array)
@@ -332,24 +336,27 @@ function numerical_flux_first_order!(
 
     FT = eltype(a_sub_fluxᵀn)
     @unroll for k in 1:NumSubFluxes
-        @inbounds sub = rem_balance_law.subs[k]
-        @inbounds nf = numerical_fluxes[2][k]
-        # compute this submodels flux
-        fill!(a_sub_fluxᵀn, -zero(FT))
-        numerical_flux_first_order!(
-            nf,
-            sub,
-            sub_fluxᵀn,
-            normal_vector,
-            state_conservative⁻,
-            state_auxiliary⁻,
-            state_conservative⁺,
-            state_auxiliary⁺,
-            x...,
-        )
+        @inbounds if rem_balance_law.subsdir[k] isa EveryDirection ||
+                     rem_balance_law.subsdir[k] == direction
+            sub = rem_balance_law.subs[k]
+            nf = numerical_fluxes[2][k]
+            # compute this submodels flux
+            fill!(a_sub_fluxᵀn, -zero(FT))
+            numerical_flux_first_order!(
+                nf,
+                sub,
+                sub_fluxᵀn,
+                normal_vector,
+                state_conservative⁻,
+                state_auxiliary⁻,
+                state_conservative⁺,
+                state_auxiliary⁺,
+                x...,
+            )
 
-        # Subtract off this sub models flux
-        a_fluxᵀn .-= a_sub_fluxᵀn
+            # Subtract off this sub models flux
+            a_fluxᵀn .-= a_sub_fluxᵀn
+        end
     end
 end
 
@@ -391,17 +398,20 @@ function numerical_boundary_flux_first_order!(
 
 
     # Call the numerical flux for the main model
-    @inbounds numerical_boundary_flux_first_order!(
-        numerical_fluxes[1],
-        rem_balance_law.main,
-        fluxᵀn,
-        normal_vector,
-        state_conservative⁻,
-        state_auxiliary⁻,
-        state_conservative⁺,
-        state_auxiliary⁺,
-        x...,
-    )
+    if rem_balance_law.maindir isa EveryDirection ||
+       rem_balance_law.maindir == direction
+        @inbounds numerical_boundary_flux_first_order!(
+            numerical_fluxes[1],
+            rem_balance_law.main,
+            fluxᵀn,
+            normal_vector,
+            state_conservative⁻,
+            state_auxiliary⁻,
+            state_conservative⁺,
+            state_auxiliary⁺,
+            x...,
+        )
+    end
 
     # Create put the sub model fluxes
     a_fluxᵀn = getfield(fluxᵀn, :array)
@@ -410,29 +420,32 @@ function numerical_boundary_flux_first_order!(
 
     FT = eltype(a_sub_fluxᵀn)
     @unroll for k in 1:NumSubFluxes
-        @inbounds sub = rem_balance_law.subs[k]
-        @inbounds nf = numerical_fluxes[2][k]
+        @inbounds if rem_balance_law.subsdir[k] isa EveryDirection ||
+                     rem_balance_law.subsdir[k] == direction
+            sub = rem_balance_law.subs[k]
+            nf = numerical_fluxes[2][k]
 
-        # reset the plus-side data
-        a_state_conservative⁺ .= a_back_state_conservative⁺
-        a_state_auxiliary⁺ .= a_back_state_auxiliary⁺
+            # reset the plus-side data
+            a_state_conservative⁺ .= a_back_state_conservative⁺
+            a_state_auxiliary⁺ .= a_back_state_auxiliary⁺
 
-        # compute this submodels flux
-        fill!(a_sub_fluxᵀn, -zero(FT))
-        numerical_boundary_flux_first_order!(
-            nf,
-            sub,
-            sub_fluxᵀn,
-            normal_vector,
-            state_conservative⁻,
-            state_auxiliary⁻,
-            state_conservative⁺,
-            state_auxiliary⁺,
-            x...,
-        )
+            # compute this submodels flux
+            fill!(a_sub_fluxᵀn, -zero(FT))
+            numerical_boundary_flux_first_order!(
+                nf,
+                sub,
+                sub_fluxᵀn,
+                normal_vector,
+                state_conservative⁻,
+                state_auxiliary⁻,
+                state_conservative⁺,
+                state_auxiliary⁺,
+                x...,
+            )
 
-        # Subtract off this sub models flux
-        a_fluxᵀn .-= a_sub_fluxᵀn
+            # Subtract off this sub models flux
+            a_fluxᵀn .-= a_sub_fluxᵀn
+        end
     end
 end
 

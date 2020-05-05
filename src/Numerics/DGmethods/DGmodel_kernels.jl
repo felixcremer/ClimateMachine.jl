@@ -586,6 +586,15 @@ Computational kernel: Evaluate the surface integrals on right-hand side of a
         elseif direction isa HorizontalDirection
             faces = 1:(nface - 2)
         end
+        # The remainder model needs to know what directions the faces are
+        # operating in
+        face_directions = ntuple(
+            i -> (
+                i in 1:(nface - 2) ? HorizontalDirection() :
+                        VerticalDirection()
+            ),
+            nface,
+        )
 
         Nq = N + 1
         Nqk = dim == 2 ? 1 : Nq
@@ -682,25 +691,48 @@ Computational kernel: Evaluate the surface integrals on right-hand side of a
         bctype = elemtobndy[f, e⁻]
         fill!(local_flux, -zero(eltype(local_flux)))
         if bctype == 0
-            numerical_flux_first_order!(
-                numerical_flux_first_order,
-                balance_law,
-                Vars{vars_state_conservative(balance_law, FT)}(local_flux),
-                SVector(normal_vector),
-                Vars{vars_state_conservative(balance_law, FT)}(
-                    local_state_conservative⁻,
-                ),
-                Vars{vars_state_auxiliary(balance_law, FT)}(
-                    local_state_auxiliary⁻,
-                ),
-                Vars{vars_state_conservative(balance_law, FT)}(
-                    local_state_conservative⁺nondiff,
-                ),
-                Vars{vars_state_auxiliary(balance_law, FT)}(
-                    local_state_auxiliary⁺nondiff,
-                ),
-                t,
-            )
+            if balance_law isa RemBL
+                numerical_flux_first_order!(
+                    face_directions[f],
+                    numerical_flux_first_order,
+                    balance_law,
+                    Vars{vars_state_conservative(balance_law, FT)}(local_flux),
+                    SVector(normal_vector),
+                    Vars{vars_state_conservative(balance_law, FT)}(
+                        local_state_conservative⁻,
+                    ),
+                    Vars{vars_state_auxiliary(balance_law, FT)}(
+                        local_state_auxiliary⁻,
+                    ),
+                    Vars{vars_state_conservative(balance_law, FT)}(
+                        local_state_conservative⁺nondiff,
+                    ),
+                    Vars{vars_state_auxiliary(balance_law, FT)}(
+                        local_state_auxiliary⁺nondiff,
+                    ),
+                    t,
+                )
+            else
+                numerical_flux_first_order!(
+                    numerical_flux_first_order,
+                    balance_law,
+                    Vars{vars_state_conservative(balance_law, FT)}(local_flux),
+                    SVector(normal_vector),
+                    Vars{vars_state_conservative(balance_law, FT)}(
+                        local_state_conservative⁻,
+                    ),
+                    Vars{vars_state_auxiliary(balance_law, FT)}(
+                        local_state_auxiliary⁻,
+                    ),
+                    Vars{vars_state_conservative(balance_law, FT)}(
+                        local_state_conservative⁺nondiff,
+                    ),
+                    Vars{vars_state_auxiliary(balance_law, FT)}(
+                        local_state_auxiliary⁺nondiff,
+                    ),
+                    t,
+                )
+            end
             numerical_flux_second_order!(
                 numerical_flux_second_order,
                 balance_law,
