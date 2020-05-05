@@ -1,12 +1,15 @@
 export remainder_DGModel
 """
-    RemBL(main::BalanceLaw, subcomponents::Tuple)
+    RemBL(
+        main::BalanceLaw,
+        subcomponents::Tuple,
+        maindir::Direction,
+        subsdir::Tuple,
+    )
 
-Compute the "remainder" contribution of the `main` model, after subtracting
-`subcomponents`.
-
-Currently only the `flux_nondiffusive!` and `source!` are handled by the
-remainder model
+Balance law for holding remainder model information. Direction is put here since
+direction is so intertwined with the DGModel_kernels, that it is easier to hande
+this in this container.
 """
 struct RemBL{M, S, MD, SD} <: BalanceLaw
     main::M
@@ -91,6 +94,8 @@ function remainder_DGModel(
         @assert num_integrals(subdg.balancelaw, FT) == 0
         @assert num_reverse_integrals(subdg.balancelaw, FT) == 0
 
+        # The remainder model requires that the subcomponent direction be
+        # included in the main model directions
         @assert (
             maindg.direction isa EveryDirection ||
             maindg.direction === subdg.direction
